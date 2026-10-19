@@ -1,0 +1,90 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Thống kê & Báo cáo";
+}
+
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.common.css" />
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.light.css" />
+<style>
+    .report-page { margin: 18px auto; padding: 22px; background: #fff; border: 1px solid #e1e5eb; border-radius: 6px; box-shadow: 0 8px 24px rgba(30,50,80,.08); }
+    .report-heading { color: #263238; font-size: 22px; font-weight: 700; border-left: 3px solid #ef3340; padding-left: 11px; }
+    .report-header {display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 8px 0 22px; }
+    .report-card { height: 100%; padding: 16px; border: 1px solid #e1e5eb; border-radius: 5px; background: #fff; }
+    .report-chart { height: 360px; }
+</style>
+
+<div class="report-page">
+    <div class="report-header">
+        <h1 class="report-heading">Thống kê & Báo cáo</h1>
+        <div class="mt-4"><div id="backButton"></div></div>
+    </div>
+    <div id="reportError" class="alert alert-danger d-none"></div>
+    <div id="reportEmpty" class="alert alert-info d-none">Chưa có dữ liệu để thống kê</div>
+    <div id="reportCharts" class="row g-3 d-none">
+        <div class="col-lg-6"><section class="report-card"><div id="yearChart" class="report-chart"></div></section></div>
+        <div class="col-lg-6"><section class="report-card"><div id="projectChart" class="report-chart"></div></section></div>
+    </div>
+</div>
+
+@section scripts {
+<script src="https://cdn3.devexpress.com/jslib/22.2.6/js/dx.all.js"></script>
+<script>
+$(function () {
+    var apiBase = "@Url.Content("~/api/requestapi")";
+    var yearChart = $("#yearChart").dxChart({
+        dataSource: [],
+        title: "Số phiếu bảo hiểm theo năm",
+        commonSeriesSettings: { argumentField: "Year", type: "bar" },
+        series: [{ valueField: "Count", name: "Số phiếu", color: "#337ab7" }],
+        argumentAxis: {
+            title: "Năm",
+            allowDecimals: false,
+            label: { customizeText: function (label) { return String(label.value); } }
+        },
+        valueAxis: { title: "Số phiếu", allowDecimals: false, min: 0 },
+        legend: { visible: false },
+        tooltip: { enabled: true, customizeTooltip: function (point) { return { text: String(point.argument) + ": " + point.valueText + " phiếu" }; } },
+        export: { enabled: true }
+    }).dxChart("instance");
+    var projectChart = $("#projectChart").dxPieChart({
+        dataSource: [],
+        type: "doughnut",
+        title: "Số phiếu theo bộ phận / dự án",
+        series: [{
+            argumentField: "DepartmentProject",
+            valueField: "Count",
+            label: { visible: true, position: "outside", connector: { visible: true }, customizeText: function (item) { return item.argumentText + " (" + item.valueText + ")"; } }
+        }],
+        legend: { visible: true, horizontalAlignment: "center", verticalAlignment: "bottom" },
+        tooltip: { enabled: true, customizeTooltip: function (point) { return { text: point.argumentText + ": " + point.valueText + " phiếu" }; } },
+        export: { enabled: true }
+    }).dxPieChart("instance");
+    $("#backButton").dxButton({ text: "Quay lại danh sách", icon: "chevronleft", stylingMode: "outlined", onClick: function () { window.location.href = "@Url.Action("Index", "Home")"; } });
+
+    // Dùng cùng API danh sách phiếu: gom nhóm theo năm lập và bộ phận/dự án.
+    $.getJSON(apiBase).done(function (result) {
+        var requests = Array.isArray(result) ? result : (result.data || []);
+        if (!requests.length) { $("#reportEmpty").removeClass("d-none"); return; }
+
+        var years = {}, projects = {};
+        requests.forEach(function (request) {
+            var date = new Date(request.CreatedDate);
+            if (!isNaN(date.getTime())) {
+                var year = date.getFullYear();
+                years[year] = (years[year] || 0) + 1;
+            }
+            var project = String(request.DepartmentProject || "Chưa phân loại").trim() || "Chưa phân loại";
+            projects[project] = (projects[project] || 0) + 1;
+        });
+
+        yearChart.option("dataSource", Object.keys(years).map(function (year) { return { Year: Number(year), Count: years[year] }; }).sort(function (a, b) { return a.Year - b.Year; }));
+        projectChart.option("dataSource", Object.keys(projects).map(function (name) { return { DepartmentProject: name, Count: projects[name] }; }).sort(function (a, b) { return b.Count - a.Count; }));
+        $("#reportCharts").removeClass("d-none");
+        setTimeout(function () { yearChart.repaint(); projectChart.repaint(); }, 0);
+    }).fail(function (xhr) {
+        var message = xhr.responseJSON && (xhr.responseJSON.Message || xhr.responseJSON.message);
+        $("#reportError").text("Không tải được dữ liệu thống kê: " + (message || xhr.statusText || "Lỗi kết nối API.")).removeClass("d-none");
+    });
+});
+</script>
+}

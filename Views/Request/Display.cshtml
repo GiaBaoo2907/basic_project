@@ -1,0 +1,166 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Chi tiết phiếu bảo hiểm";
+    var requestId = (int)ViewBag.RequestId;
+}
+
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.common.css" />
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.light.css" />
+<style>
+    .display-card { background: #fff; border: 1px solid #e1e5eb; border-radius: 6px; padding: 22px; box-shadow: 0 8px 24px rgba(30, 50, 80, .08); }
+    .display-heading { color: #000; font-size: 20px; font-weight: 700; border-left: 3px solid #ef3340; padding-left: 11px; margin: 8px 0 22px; }
+    .display-label { color: #5c6670; font-weight: 600; margin-bottom: 5px; }
+    .display-section-heading { margin: 0 0 12px; padding-left: 10px; border-left: 3px solid #ef3340; color: #303a44; font-size: 17px; font-weight: 650; line-height: 1.4; }
+    .display-grid-shell { overflow: hidden; border: 1px solid #d9dfe6; border-radius: 4px; }
+    #displayAssetGrid { width: 100%; font-size: 13px; color: #263238; }
+    #displayAssetGrid .dx-datagrid-headers { color: #35414c; font-size: 12.5px; font-weight: 600; }
+    #displayAssetGrid .dx-header-row > td { background: #edf1f5; }
+    #displayAssetGrid .dx-data-row:nth-child(even) > td { background: #fafbfd; }
+    #displayAssetGrid .dx-data-row:hover > td { background: #f1f7ff; }
+    #attachmentGrid { width: 100%; font-size: 13px; color: #263238; }
+    #attachmentGrid .dx-datagrid-headers { color: #35414c; font-size: 12.5px; font-weight: 600; }
+    #attachmentGrid .dx-header-row > td { background: #edf1f5; }
+    #attachmentGrid .dx-data-row:nth-child(even) > td { background: #fafbfd; }
+    #attachmentGrid .dx-data-row:hover > td { background: #f1f7ff; }
+    .attachment-name-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .attachment-name-cell a { overflow-wrap: anywhere; }
+    .attachment-file-type { min-width: 38px; color: #66717d; font-size: 11px; font-weight: 700; }
+    .display-document-list { display: grid; gap: 5px; min-width: 180px; }
+    .display-document-link { color: #0d6efd; text-decoration: none; font-weight: 500; overflow-wrap: anywhere; }
+    .display-document-link:hover { text-decoration: underline; }
+    .display-card .dx-texteditor { border-color: #e1e5eb; background: #f7f8fa; }
+</style>
+
+<div class="display-card">
+    <h1 class="display-heading">CHI TIẾT PHIẾU BẢO HIỂM</h1>
+    <div id="displayError" class="alert alert-danger d-none" role="alert"></div>
+    <div id="displayLoading" class="text-muted mb-3">Đang tải thông tin phiếu...</div>
+    <div id="requestDetails" class="d-none">
+        <div class="row g-3">
+            <div class="col-md-6"><div class="display-label">Tiêu đề</div><div id="title"></div></div>
+            <div class="col-md-6"><div class="display-label">Mã phiếu bảo hiểm</div><div id="code"></div></div>
+            <div class="col-md-6"><div class="display-label">Người lập</div><div id="creator"></div></div>
+            <div class="col-md-6"><div class="display-label">Bộ phận/Dự án</div><div id="departmentProject"></div></div>
+            <div class="col-md-6"><div class="display-label">Phân loại</div><div id="classification"></div></div>
+            <div class="col-md-6"><div class="display-label">Loại bảo hiểm</div><div id="insuranceType"></div></div>
+            <div class="col-md-6"><div class="display-label">Hạn bảo hiểm</div><div id="insuranceExpiry"></div></div>
+            <div class="col-md-6"><div class="display-label">Ngày thực hiện kiểm tra</div><div id="createdDate"></div></div>
+        </div>
+        <div class="mt-4">
+            <h2 class="display-section-heading">Danh sách vật tư</h2>
+            <div class="display-grid-shell" role="region" aria-label="Danh sách vật tư, cuộn ngang để xem các cột"><div id="displayAssetGrid"></div></div>
+            <div id="noAssets" class="text-muted d-none mt-2">Chưa có vật tư</div>
+        </div>
+        <div class="mt-4">
+            <h2 class="display-section-heading">Biên bản đính kèm</h2>
+            <div id="attachmentGrid"></div>
+        </div>
+    </div>
+    <div class="mt-4"><div id="backButton"></div></div>
+</div>
+
+@section scripts {
+<script src="https://cdn3.devexpress.com/jslib/22.2.6/js/dx.all.js"></script>
+<script>
+$(function () {
+    var requestId = @requestId;
+    var apiBase = "@Url.Content("~/api/requestapi")";
+    var displayFields = {};
+    var displayGrid;
+    var empty = "—";
+
+    function formatDate(value) {
+        if (!value) return empty;
+        var date = new Date(value);
+        if (isNaN(date.getTime())) return empty;
+        return String(date.getDate()).padStart(2, "0") + "/" + String(date.getMonth() + 1).padStart(2, "0") + "/" + String(date.getFullYear()).slice(-2);
+    }
+    function displayText(value) { return value == null || value === "" ? empty : String(value); }
+    function initField(id) { displayFields[id] = $("#" + id).dxTextBox({ readOnly: true, value: empty, stylingMode: "filled" }).dxTextBox("instance"); }
+    ["title", "code", "creator", "departmentProject", "classification", "insuranceType", "insuranceExpiry", "createdDate"].forEach(initField);
+
+    displayGrid = $("#displayAssetGrid").dxDataGrid({
+        dataSource: [],
+        showBorders: true,
+        showRowLines: true,
+        rowAlternationEnabled: false,
+        columnAutoWidth: false,
+        allowColumnResizing: true,
+        columnResizingMode: "nextColumn",
+        wordWrapEnabled: true,
+        hoverStateEnabled: true,
+        scrolling: { mode: "standard", showScrollbar: "always" },
+        noDataText: "Chưa có vật tư trong phiếu này.",
+        columns: [
+            { caption: "STT", width: 58, alignment: "center", cellTemplate: function (container, info) { container.text(info.rowIndex + 1); } },
+            { dataField: "Equipment", caption: "Thiết bị", minWidth: 180 },
+            { caption: "Tài liệu", width: 235, cellTemplate: function (container, info) {
+                var asset = info.data, $list = $("<div class='display-document-list'>"), docs = asset.DocumentFiles || [];
+                if (docs.length) docs.forEach(function (file) {
+                    var url = apiBase + "/" + requestId + "/attachments/" + file.Id + "/preview";
+                    $list.append($("<a class='display-document-link' target='_blank' rel='noopener'>").attr("href", url).text(file.FileName || asset.DocumentName || "Xem tài liệu"));
+                });
+                else $list.text(displayText(asset.DocumentName));
+                container.empty().append($list);
+            } },
+            { dataField: "PurchaseDate", caption: "Ngày mua BH", dataType: "date", format: "dd/MM/yy", width: 130 },
+            { dataField: "ExpiryDate", caption: "Ngày đến hạn", dataType: "date", format: "dd/MM/yy", width: 125 },
+            { dataField: "Value", caption: "Giá trị", dataType: "number", format: "#,##0.##", alignment: "right", width: 125 },
+            { dataField: "Premium", caption: "Phí bảo hiểm", dataType: "number", format: "#,##0.##", alignment: "right", width: 125 },
+            { dataField: "Quantity", caption: "Số lượng", alignment: "center", width: 100 },
+            { dataField: "InsuranceType", caption: "Loại bảo hiểm", minWidth: 180 },
+            { dataField: "ContractNumber", caption: "Số hợp đồng", minWidth: 160 },
+            { dataField: "Supplier", caption: "Nhà cung cấp", minWidth: 160 }
+        ]
+    }).dxDataGrid("instance");
+
+    var attachmentGrid = $("#attachmentGrid").dxDataGrid({
+        dataSource: [], showBorders: true, showRowLines: true, rowAlternationEnabled: false,
+        columnAutoWidth: false, wordWrapEnabled: true, hoverStateEnabled: true,
+        paging: { enabled: false }, sorting: { mode: "none" }, noDataText: "Chưa có biên bản đính kèm",
+        columns: [
+            { caption: "STT", width: 64, alignment: "center", cellTemplate: function (container, info) { container.text(info.rowIndex + 1); } },
+            { caption: "Loại file", width: 120, cellTemplate: function (container, info) { var match = String(info.data.FileName || "").match(/\.([^.]+)$/); container.append($("<span class='attachment-file-type'>").text(match ? match[1].toUpperCase() : "FILE")); } },
+            { caption: "Tên file", cellTemplate: function (container, info) { var file = info.data, url = apiBase + "/" + requestId + "/attachments/" + file.Id + "/preview"; container.append($("<div class='attachment-name-cell'>").append($("<a class='display-document-link' target='_blank' rel='noopener'>").attr("href", url).text(file.FileName))); } },
+            { caption: "Tải về", width: 120, alignment: "center", cellTemplate: function (container, info) { var url = apiBase + "/" + requestId + "/attachments/" + info.data.Id; $("<div>").dxButton({ icon: "download", text: "Tải về", stylingMode: "text", hint: "Tải tệp về máy", onClick: function () { window.location.href = url; } }).appendTo(container); } }
+        ]
+    }).dxDataGrid("instance");
+    $("#backButton").dxButton({ text: "Quay lại danh sách", icon: "chevronleft", type: "normal", stylingMode: "outlined", onClick: function () { window.location.href = "@Url.Action("Index", "Home")"; } });
+
+    $.getJSON(apiBase + "/" + requestId).done(function (data) {
+        displayFields.title.option("value", displayText(data.Title));
+        displayFields.code.option("value", displayText(data.Code));
+        displayFields.creator.option("value", displayText(data.Creator));
+        displayFields.departmentProject.option("value", displayText(data.DepartmentProject));
+        displayFields.classification.option("value", displayText(data.Classification));
+        displayFields.insuranceType.option("value", displayText(data.InsuranceType));
+        displayFields.insuranceExpiry.option("value", formatDate(data.InsuranceExpiry));
+        displayFields.createdDate.option("value", formatDate(data.CreatedDate));
+        var assets = data.Assets || [];
+        displayGrid.option("dataSource", assets);
+        if (!assets.length) $("#noAssets").removeClass("d-none");
+        $("#displayLoading").addClass("d-none");
+        $("#requestDetails").removeClass("d-none");
+        setTimeout(function () { displayGrid.updateDimensions(); }, 0);
+
+        $.getJSON(apiBase + "/" + requestId + "/attachments").done(function (files) {
+            var assetFiles = {};
+            files.forEach(function (file) {
+                if (file.RequestAssetId) {
+                    assetFiles[file.RequestAssetId] = assetFiles[file.RequestAssetId] || [];
+                    assetFiles[file.RequestAssetId].push(file);
+                }
+            });
+            assets.forEach(function (asset) { asset.DocumentFiles = assetFiles[asset.Id] || []; });
+            displayGrid.option("dataSource", assets);
+            attachmentGrid.option("dataSource", files.filter(function (file) { return !file.RequestAssetId; }));
+        }).fail(function () {
+            attachmentGrid.option("noDataText", "Không tải được danh sách tệp đính kèm.");
+        });
+    }).fail(function () {
+        $("#displayLoading").addClass("d-none");
+        $("#displayError").text("Không tìm thấy phiếu hoặc không thể tải thông tin.").removeClass("d-none");
+    });
+});
+</script>
+}

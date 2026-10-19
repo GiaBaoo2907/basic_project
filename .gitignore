@@ -1,0 +1,20 @@
+# Visual Studio state and user-specific settings
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build output
+[Bb]in/
+[Oo]bj/
+
+# NuGet packages are restored from packages.config
+packages/
+
+# User-uploaded files and runtime data
+App_Data/
+
+# Local logs and temporary files
+*.log
+*.tmp
