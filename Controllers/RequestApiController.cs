@@ -161,7 +161,7 @@ namespace DeviceManagement.Controllers
                     string.IsNullOrWhiteSpace(asset.ContractNumber) || asset.Quantity < 1 ||
                     asset.Value < 0 || asset.Premium < 0)
                 {
-                    error = "Mỗi vật tư cần có thiết bị, ngày mua bảo hiểm, giá trị, phí bảo hiểm, số lượng và số hợp đồng hợp lệ.";
+                    error = "Thiết bị trong phiếu chưa có đủ dữ liệu từ danh mục (tên, ngày mua, số lượng, giá trị, phí bảo hiểm và số hợp đồng). Hãy cập nhật danh mục thiết bị rồi chọn lại.";
                     return false;
                 }
             }

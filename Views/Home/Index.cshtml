@@ -1,6 +1,6 @@
 ﻿@{
     Layout = "~/Views/Shared/_Layout.cshtml";
-    ViewBag.Title = "Danh sách phiếu";
+    ViewBag.Title = "Yêu cầu bảo hiểm";
 }
 
 <!-- DevExtreme CSS (CDN) -->
@@ -22,10 +22,6 @@
         align-items: center;
     }
 
-    .dx-datagrid .title-column {
-        font-weight: 700;
-    }
-
     .request-link { color: #000000; text-decoration: none; cursor: pointer; }
     .request-link:hover { text-decoration: underline; }
 
@@ -36,7 +32,6 @@
 
 <div class="toolbar-container">
     <div id="addButton"></div>
-    <div id="reportButton"></div>
 
     <div class="search-and-filter">
         <div id="searchBox" style="width:420px;"></div>
@@ -47,22 +42,21 @@
 <div id="gridContainer" style="padding:0 12px;"></div>
 
 @section scripts {
-    <script src="https://cdn3.devexpress.com/jslib/22.2.6/js/dx.all.js"></script>
+    <!-- <script src="https://cdn3.devexpress.com/jslib/22.2.6/js/dx.all.js"></script> -->
 
     <script>
     $(function () {
         var apiBase = "@Url.Content("~/api/requestapi")";
 
         $("#addButton").dxButton({
-            text: "Tạo phiếu", icon: "plus", type: "default", stylingMode: "contained",
+            text: "Tạo phiếu",
+            icon: "plus",
+            type: "default",
+            stylingMode: "contained",
+
             onClick: function () {
                 window.location.href = "@Url.Action("Create", "Request")";
             }
-        });
-
-        $("#reportButton").dxButton({
-            text: "Thống kê & Báo cáo", icon: "chart", type: "normal", stylingMode: "outlined",
-            onClick: function () { window.location.href = "@Url.Action("Index", "Report")"; }
         });
 
         var searchTerm = "";
@@ -79,7 +73,6 @@
                 } catch (ignore) { }
             }
 
-            // Fallback for browsers that do not implement String.prototype.normalize().
             var accentGroups = [
                 { base: "a", chars: "àáạảãâầấậẩẫăằắặẳẵ" },
                 { base: "e", chars: "èéẹẻẽêềếệểễ" },

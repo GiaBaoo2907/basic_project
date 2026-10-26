@@ -59,6 +59,7 @@
         <div id="importAssetsButton"></div>
         <input id="importAssetsFile" type="file" accept=".csv,text/csv" hidden />
     </div>
+    <div id="devicePickerPopup"></div>
     <div class="asset-grid-scroll" role="region" aria-label="Danh sách vật tư, cuộn ngang để xem các cột"><div id="assetGrid"></div></div>
 
     <div class="mt-3">
@@ -79,9 +80,13 @@
     var isEdit = @isEdit.ToString().ToLowerInvariant();
     var requestId = @requestId;
     var apiBase = "/api/requestapi";
+    var deviceApiUrl = '@Url.Content("~/api/deviceapi")';
     var assetRows = [];
     var assetGrid;
     var generalAttachmentsGrid;
+    var devicePickerPopup;
+    var devicePickerSelect;
+    var devicePickerDevices = [];
     var savedGeneralAttachments = [];
     var pendingGeneralFiles = [];
     var formControls = {};
@@ -136,9 +141,9 @@
     function initializeFormControls() {
         formControls.Title = $("#Title").dxTextBox({ maxLength: 500, placeholder: "Nhập tiêu đề..." }).dxTextBox("instance");
         formControls.Creator = $("#Creator").dxSelectBox({ dataSource: ["Sharepoint Administrator - QA", "Nguyễn Văn A", "Trần Thị B"], placeholder: "Chọn người lập...", searchEnabled: true, showClearButton: true }).dxSelectBox("instance");
-        formControls.DepartmentProject = $("#DepartmentProject").dxSelectBox({ dataSource: ["Dự án 01", "Dự án 02", "Phòng kỹ thuật"], placeholder: "Chọn bộ phận/dự án...", searchEnabled: true, showClearButton: true }).dxSelectBox("instance");
-        formControls.Classification = $("#Classification").dxSelectBox({ dataSource: ["Mới", "Gia hạn"], placeholder: "Select...", showClearButton: true }).dxSelectBox("instance");
-        formControls.InsuranceType = $("#InsuranceType").dxSelectBox({ dataSource: ["Bảo hiểm mọi rủi ro", "Bảo hiểm trách nhiệm bên thứ ba"], placeholder: "Select...", searchEnabled: true, showClearButton: true }).dxSelectBox("instance");
+        formControls.DepartmentProject = $("#DepartmentProject").dxSelectBox({ dataSource: ["Dự án 01", "Dự án 02", "Phòng Hành chính", "Kho vận", "Phòng kỹ thuật"], placeholder: "Chọn bộ phận/dự án...", searchEnabled: true, showClearButton: true, onValueChanged: refreshDevicePickerList }).dxSelectBox("instance");
+        formControls.Classification = $("#Classification").dxSelectBox({ dataSource: ["Mới", "Gia hạn", "Thiết bị", "Tài sản", "Phương tiện", "Vật tư"], placeholder: "Chọn phân loại...", searchEnabled: true, showClearButton: true, onValueChanged: refreshDevicePickerList }).dxSelectBox("instance");
+        formControls.InsuranceType = $("#InsuranceType").dxSelectBox({ dataSource: ["Bảo hiểm mọi rủi ro", "Bảo hiểm trách nhiệm bên thứ ba", "Bảo hiểm tài sản", "Bảo hiểm thiết bị", "Bảo hiểm phương tiện"], placeholder: "Chọn loại bảo hiểm...", searchEnabled: true, showClearButton: true, onValueChanged: refreshDevicePickerList }).dxSelectBox("instance");
         formControls.InsuranceExpiry = $("#InsuranceExpiry").dxDateBox({ type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true, showClearButton: true }).dxDateBox("instance");
         formControls.Code = $("#Code").dxTextBox({ readOnly: true, placeholder: "Tự động tạo khi lưu" }).dxTextBox("instance");
         formControls.CreatedDate = $("#CreatedDate").dxDateBox({ type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true }).dxDateBox("instance");
@@ -158,6 +163,72 @@
     }
     function refreshAssetGrid() {
         if (assetGrid) assetGrid.option("dataSource", assetRows.slice());
+    }
+    function normalizedFilterValue(value) {
+        return String(value || "").trim().toLocaleLowerCase();
+    }
+    function refreshDevicePickerList() {
+        if (!devicePickerSelect) return;
+        var department = normalizedFilterValue(fieldValue("DepartmentProject"));
+        var classification = normalizedFilterValue(fieldValue("Classification"));
+        var insuranceType = normalizedFilterValue(fieldValue("InsuranceType"));
+        var filtered = devicePickerDevices.filter(function (device) {
+            return (!department || normalizedFilterValue(device.Department) === department) &&
+                (!classification || normalizedFilterValue(device.Classification) === classification) &&
+                (!insuranceType || normalizedFilterValue(device.InsuranceType) === insuranceType);
+        });
+        devicePickerSelect.option({ dataSource: filtered, value: null });
+    }
+    function openDevicePicker() {
+        if (!devicePickerPopup) {
+            devicePickerPopup = $("#devicePickerPopup").dxPopup({
+                title: "Chọn thiết bị từ danh mục",
+                contentTemplate: function (container) {
+                    devicePickerSelect = $("<div>").appendTo(container).dxSelectBox({
+                        dataSource: [], valueExpr: "DeviceId", displayExpr: "DeviceName",
+                        searchEnabled: true,
+                        placeholder: "Tìm và chọn thiết bị trong danh mục...",
+                        noDataText: "Không có thiết bị khớp tiêu chí đã chọn"
+                    }).dxSelectBox("instance");
+                    $("<div class='mt-3 d-flex justify-content-end'>").appendTo(container).dxButton({
+                        text: "Thêm vào phiếu", icon: "plus", type: "default", stylingMode: "contained",
+                        onClick: function () {
+                            var device = devicePickerSelect.option("selectedItem");
+                            if (!device) return;
+                            addAsset({
+                                Equipment: device.DeviceName,
+                                PurchaseDate: device.PurchaseDate,
+                                ExpiryDate: device.ExpiryDate,
+                                Quantity: device.Quantity,
+                                Value: device.Value,
+                                Premium: device.InsuranceFee,
+                                InsuranceType: device.InsuranceType,
+                                Supplier: device.Supplier,
+                                Quantity: 1
+                            });
+                            devicePickerPopup.hide();
+                        }
+                    });
+                },
+                width: 520,
+                maxWidth: "95vw",
+                height: "auto",
+                showCloseButton: true,
+                hideOnOutsideClick: true,
+                onShown: function () {
+                    refreshDevicePickerList();
+                }
+            }).dxPopup("instance");
+        }
+
+        $.getJSON(deviceApiUrl)
+            .done(function (devices) {
+                devicePickerDevices = devices || [];
+                devicePickerPopup.show();
+            })
+            .fail(function (xhr) {
+                error(xhr.responseJSON && xhr.responseJSON.Message || xhr.responseText || "Không tải được danh mục thiết bị.");
+            });
     }
     function renderDocumentCell(container, cellInfo) {
         var asset = cellInfo.data;
@@ -208,15 +279,15 @@
             editing: { mode: "cell", allowUpdating: true, allowAdding: false, allowDeleting: false },
             columns: [
                 { caption: "STT", width: 58, alignment: "center", allowEditing: false, cellTemplate: function (container, info) { container.text(info.rowIndex + 1); } },
-                { dataField: "Equipment", caption: "Thiết bị", minWidth: 180, validationRules: [{ type: "required" }] },
+                { dataField: "Equipment", caption: "Thiết bị", minWidth: 180 },
                 { caption: "Tài liệu", width: 235, allowEditing: false, cellTemplate: renderDocumentCell },
-                { dataField: "PurchaseDate", caption: "Ngày mua BH", dataType: "date", format: "dd/MM/yy", editorOptions: { displayFormat: "dd/MM/yy" }, width: 130, validationRules: [{ type: "required" }] },
+                { dataField: "PurchaseDate", caption: "Ngày mua BH", dataType: "date", format: "dd/MM/yy", editorOptions: { displayFormat: "dd/MM/yy" }, width: 130 },
                 { dataField: "ExpiryDate", caption: "Ngày đến hạn", dataType: "date", format: "dd/MM/yy", editorOptions: { displayFormat: "dd/MM/yy" }, width: 125 },
                 { dataField: "Value", caption: "Giá trị", dataType: "number", format: "#,##0.##", alignment: "right", width: 125 },
                 { dataField: "Premium", caption: "Phí bảo hiểm", dataType: "number", format: "#,##0.##", alignment: "right", width: 125 },
-                { dataField: "Quantity", caption: "Số lượng", dataType: "number", alignment: "center", width: 100, validationRules: [{ type: "required" }, { type: "range", min: 1 }] },
+                { dataField: "Quantity", caption: "Số lượng", dataType: "number", alignment: "center", width: 100 },
                 { dataField: "InsuranceType", caption: "Loại bảo hiểm", minWidth: 180 },
-                { dataField: "ContractNumber", caption: "Số hợp đồng", minWidth: 160, validationRules: [{ type: "required" }] },
+                { dataField: "ContractNumber", caption: "Số hợp đồng", minWidth: 160 },
                 { dataField: "Supplier", caption: "Nhà cung cấp", minWidth: 160 },
                 { caption: "Thao tác", width: 78, alignment: "center", allowEditing: false, cellTemplate: function (container, info) { $("<div>").dxButton({ icon: "trash", type: "danger", stylingMode: "text", hint: "Xóa vật tư", onClick: function () { var index = assetRows.findIndex(function (item) { return item.ClientId === info.data.ClientId; }); if (index >= 0) assetRows.splice(index, 1); refreshAssetGrid(); } }).appendTo(container); } }
             ]
@@ -270,10 +341,17 @@
                 ContractNumber: row.ContractNumber, Supplier: row.Supplier
             };
             if (!a.Equipment || !a.PurchaseDate || !a.ContractNumber || a.Quantity < 1) valid = false;
+            if (a.ExpiryDate && a.PurchaseDate && a.ExpiryDate < a.PurchaseDate) {
+                throw new Error(
+                    "Ngày đến hạn không được trước ngày mua BH của thiết bị: " +
+                    (a.Equipment || "chưa đặt tên") + "."
+                );
+            }
             assets.push(a);
         });
         var model = { Id: requestId, Title: fieldValue("Title"), Creator: fieldValue("Creator"), DepartmentProject: fieldValue("DepartmentProject"), Classification: fieldValue("Classification"), InsuranceType: fieldValue("InsuranceType"), InsuranceExpiry: dateValue(fieldValue("InsuranceExpiry")) || null, CreatedDate: dateValue(fieldValue("CreatedDate")), Assets: assets };
-        if (!model.Title || !model.Creator || !model.DepartmentProject || !model.CreatedDate || !valid) throw new Error("Vui lòng nhập đủ thông tin bắt buộc. Mỗi vật tư nếu có cần có thiết bị, ngày mua, số hợp đồng và số lượng hợp lệ.");
+        if (!model.Title || !model.Creator || !model.DepartmentProject || !model.CreatedDate) throw new Error("Vui lòng nhập đủ thông tin bắt buộc của phiếu.");
+        if (!valid) throw new Error("Thiết bị trong phiếu chưa có đủ dữ liệu từ danh mục. Vui lòng chọn lại thiết bị hoặc bổ sung ngày mua, số hợp đồng và số lượng trong danh mục thiết bị.");
         return model;
     }
     function uploadFile(id, file, assetId) {
@@ -299,7 +377,7 @@
     initializeFormControls();
     initializeAssetGrid();
     initializeGeneralAttachmentsGrid();
-    $("#addAsset").dxButton({ text: "Thêm thiết bị", icon: "plus", type: "default", stylingMode: "outlined", onClick: function () { addAsset(); } });
+    $("#addAsset").dxButton({ text: "Thêm thiết bị", icon: "plus", type: "default", stylingMode: "outlined", onClick: openDevicePicker });
     $("#exportAssets").dxButton({ text: "Export CSV", icon: "export", type: "default", stylingMode: "contained", onClick: exportAssets });
     $("#importAssetsButton").dxButton({ text: "Import CSV", icon: "upload", type: "default", stylingMode: "contained", onClick: function () { $("#importAssetsFile").trigger("click"); } });
     $("#saveRequest").dxButton({ text: "Lưu", icon: "save", type: "default", stylingMode: "contained", onClick: save });
