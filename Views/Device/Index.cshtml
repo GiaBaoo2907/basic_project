@@ -1,0 +1,209 @@
+@{
+    ViewBag.Title = "Theo dõi thiết bị";
+}
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.light.css" />
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.common.css" />
+
+<style>
+    .toolbar {
+        display: flex;
+        margin-bottom: 10px;
+        gap: 10px;
+    }
+    .device-name-link { color: #000000; text-decoration: none; }
+    .device-name-link:hover { text-decoration: underline; }
+    .device-action-button { margin: 0 3px; }
+    .device-status-badge { display: inline-block; padding: 4px 9px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .device-status-active { color: #176b35; background: #e4f5e9; }
+    .device-status-stopped { color: #a1262f; background: #fde8e8; }
+    
+</style>
+
+<div class="toolbar">
+    <div id="add-device"></div>
+    <div class="search"></div>
+    <div class="category-filter"></div>
+    <div class="department-filter"></div>
+</div>
+
+<div id="device-grid"></div>
+
+@section scripts{
+    <script src="https://cdn3.devexpress.com/jslib/22.2.6/js/dx.all.js"></script>
+    <script>
+        $(function(){
+            var apiUrl = '@Url.Content("~/api/deviceapi")';
+            var detailUrlTemplate = '@Url.Action("Display", "Device", new { id = "__deviceId__" })';
+            var editUrlTemplate = '@Url.Action("Edit", "Device", new { id = "__deviceId__" })';
+
+            $("#add-device").dxButton({
+                text: "Thêm thiết bị",
+                type: "default",
+                icon: "plus",
+                stylingMode: "contained",
+
+                onClick: function(){
+                    window.location.href = "@Url.Action("Create","Device")"
+                }
+            })
+
+            var grid = $("#device-grid").dxDataGrid({
+                dataSource: [],
+                noDataText: "Chưa có thiết bị trong danh mục.",
+                columnAutoWidth: true,
+                rowAlternationEnabled: true,
+                showBorders: true,
+                columns: [
+                    { dataField: "DeviceId", caption: "Mã thiết bị" },
+                    {
+                        dataField: "DeviceName",
+                        caption: "Tên thiết bị",
+                        cellTemplate: function (container, info) {
+                            var url = detailUrlTemplate.replace("__deviceId__", encodeURIComponent(info.data.DeviceId));
+                            $("<a>").addClass("device-name-link").attr("href", url).text(info.value || "").appendTo(container);
+                        }
+                    },
+                    { dataField: "Year" , caption: "Năm" },
+                    { dataField: "Classification", caption: "Phân loại" },
+                    { dataField: "Department", caption: "Bộ phận/Dự án" },
+                    { dataField: "Supplier", caption: "Nhà cung cấp" },
+                    { dataField: "Value", caption: "Giá trị", dataType: "number", format: "#,##0.##" },
+                    { dataField: "InsuranceFee", caption: "Phí bảo hiểm", dataType: "number", format: "#,##0.##" },
+                    {
+                        dataField: "Status", caption: "Trạng thái", alignment: "center",
+                        cellTemplate: function (container, info) {
+                            var status = (info.value || "").trim();
+                            var stopped = status.toLocaleLowerCase() === "ngừng sử dụng".toLocaleLowerCase() || status.toLocaleLowerCase() === "ngừng";
+                            $("<span>")
+                                .addClass("device-status-badge")
+                                .addClass(stopped ? "device-status-stopped" : "device-status-active")
+                                .text(status || "Đang sử dụng")
+                                .appendTo(container);
+                        }
+                    },
+                    {
+                        caption: "Thao tác", width: 105, alignment: "center",
+                        allowSorting: false, allowFiltering: false,
+                        cellTemplate: function (container, info) {
+                            var id = encodeURIComponent(info.data.DeviceId);
+                            $("<div>").dxButton({
+                                icon: "edit", hint: "Sửa thiết bị", stylingMode: "text",
+                                onClick: function () { window.location.href = editUrlTemplate.replace("__deviceId__", id); }
+                            }).addClass("device-action-button").appendTo(container);
+                            $("<div>").dxButton({
+                                icon: "trash", hint: "Xóa thiết bị", stylingMode: "text",
+                                onClick: function () {
+                                    DevExpress.ui.dialog.confirm("Bạn có chắc chắn muốn xóa thiết bị ‘" + (info.data.DeviceName || "") + "’ không?", "Xác nhận xóa")
+                                        .done(function (confirmed) {
+                                            if (!confirmed) return;
+                                            $.ajax({ url: apiUrl + "/" + id, method: "DELETE" })
+                                                .done(function () {
+                                                    allDevices = allDevices.filter(function (device) { return String(device.DeviceId) !== String(info.data.DeviceId); });
+                                                    applyFilters();
+                                                    DevExpress.ui.notify("Đã xóa thiết bị.", "success", 2000);
+                                                })
+                                                .fail(function (xhr) {
+                                                    DevExpress.ui.notify(xhr.responseJSON && xhr.responseJSON.Message || "Không xóa được thiết bị.", "error", 3000);
+                                                });
+                                        });
+                                }
+                            }).addClass("device-action-button").appendTo(container);
+                        }
+                    }
+                ],
+                showBorders: true,
+            }).dxDataGrid("instance");
+
+            var selectedDepartment = null;
+            var selectedCategory = null;
+            var allDevices = [];
+            var searchText = "";
+
+            function applyFilters(){
+                var keyword = searchText.trim().toLocaleLowerCase();
+                var filteredDevices = allDevices.filter(function (device) {
+                    var matchesCategory = !selectedCategory || device.Classification === selectedCategory;
+                    var matchesDepartment = !selectedDepartment || device.Department === selectedDepartment;
+                    var searchableText = [
+                        device.DeviceId,
+                        device.DeviceName,
+                        device.Year,
+                        device.Classification,
+                        device.Department,
+                        device.Value,
+                        device.InsuranceFee,
+                        device.Status,
+                    ].join(" ").toLocaleLowerCase();
+
+                    return matchesCategory &&
+                    matchesDepartment &&
+                    (!keyword || searchableText.indexOf(keyword)!==-1);
+                });
+
+                grid.option("dataSource", filteredDevices);
+                grid.pageIndex(0);
+            }
+
+            $(".search").dxTextBox({
+                placeholder: "Tìm kiếm thiết bị ...",
+                valueChangeEvent: "input",
+                onValueChanged: function(e) {
+                    searchText = e.value || "";
+                    applyFilters();
+                }
+            });
+
+            $(".category-filter").dxSelectBox({
+                placeholder: "Phân loại",
+                items: [],
+                showClearButton: true,
+                onValueChanged: function(e) {
+                    selectedCategory = e.value;
+                    applyFilters();
+                }
+            });
+
+            $(".department-filter").dxSelectBox({
+                placeholder: "Bộ phận",
+                items: [],
+                showClearButton: true,
+                onValueChanged: function(e) {
+                    selectedDepartment = e.value;
+                    applyFilters();
+                }
+            });
+
+            $.ajax({
+                url: apiUrl,
+                method: "GET",
+                dataType: "json"
+            }).done(function (devices){
+                allDevices = devices || [];
+
+                $(".category-filter").dxSelectBox("instance")
+                .option("items", Array.from(new Set(
+                    allDevices.map(function (device){
+                        return device.Classification;
+                    }).filter(Boolean)
+                )));
+
+                $(".department-filter").dxSelectBox("instance")
+                .option("items", Array.from(new Set(
+                    allDevices.map(function (device) {
+                        return device.Department;
+                    }).filter(Boolean)
+                )));
+
+                applyFilters();
+            }).fail(function (xhr) {
+                console.error("Không tải được danh sách thiết bị:", xhr.status, xhr.responseText);
+                $("#device-grid").before(
+                    $("<div class='alert alert-danger' role='alert'>")
+                        .text("Không tải được dữ liệu thiết bị. Hãy kiểm tra API /api/deviceapi và kết nối cơ sở dữ liệu.")
+                );
+            });
+        });
+    </script>
+}
+
+

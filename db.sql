@@ -70,6 +70,123 @@ IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.RequestAs
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.RequestAssets') AND name = N'IX_RequestAssets_RequestId')
     CREATE INDEX IX_RequestAssets_RequestId ON dbo.RequestAssets(RequestId);
 
+/* Danh mục thiết bị dùng chung, tách biệt với các dòng vật tư trên từng phiếu. */
+IF OBJECT_ID(N'dbo.Devices', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Devices
+    (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Devices PRIMARY KEY,
+        DeviceName nvarchar(250) NOT NULL,
+        Year int NULL,
+        Classification nvarchar(100) NULL,
+        InsuranceType nvarchar(200) NULL,
+        Department nvarchar(200) NULL,
+        PurchaseDate datetime NULL,
+        ExpiryDate datetime NULL,
+        Quantity int NULL,
+        Value decimal(18,2) NOT NULL CONSTRAINT DF_Devices_Value DEFAULT (0),
+        InsuranceFee decimal(18,2) NOT NULL CONSTRAINT DF_Devices_InsuranceFee DEFAULT (0),
+        Status nvarchar(50) NOT NULL CONSTRAINT DF_Devices_Status DEFAULT (N'Đang sử dụng'),
+        Supplier nvarchar(200) NULL
+    );
+END;
+
+/* Add separate filter fields when upgrading an existing Devices table. */
+IF COL_LENGTH(N'dbo.Devices', N'Classification') IS NULL
+    ALTER TABLE dbo.Devices ADD Classification nvarchar(100) NULL;
+IF COL_LENGTH(N'dbo.Devices', N'InsuranceType') IS NULL
+    ALTER TABLE dbo.Devices ADD InsuranceType nvarchar(200) NULL;
+IF COL_LENGTH(N'dbo.Devices', N'PurchaseDate') IS NULL
+    ALTER TABLE dbo.Devices ADD PurchaseDate datetime NULL;
+IF COL_LENGTH(N'dbo.Devices', N'ExpiryDate') IS NULL
+    ALTER TABLE dbo.Devices ADD ExpiryDate datetime NULL;
+IF COL_LENGTH(N'dbo.Devices', N'Quantity') IS NULL
+    ALTER TABLE dbo.Devices ADD Quantity int NULL;
+/* Contract numbers belong to an insurance request, not the shared device catalog. */
+IF COL_LENGTH(N'dbo.Devices', N'ContractNumber') IS NOT NULL
+    ALTER TABLE dbo.Devices DROP COLUMN ContractNumber;
+
+/* Migrate the previous Category field into InsuranceType when it exists. */
+IF COL_LENGTH(N'dbo.Devices', N'Category') IS NOT NULL
+    EXEC(N'UPDATE dbo.Devices SET InsuranceType = COALESCE(InsuranceType, Category) WHERE Category IS NOT NULL');
+
+/* Enrich devices that were copied from existing request lines. */
+;WITH ExistingRequestDevices AS
+(
+    SELECT a.Equipment, r.Classification, a.InsuranceType, a.PurchaseDate, a.ExpiryDate,
+           a.Quantity,
+           ROW_NUMBER() OVER (PARTITION BY a.Equipment ORDER BY a.Id) AS RowNum
+    FROM dbo.RequestAssets AS a
+    INNER JOIN dbo.Requests AS r ON r.Id = a.RequestId
+    WHERE NULLIF(LTRIM(RTRIM(a.Equipment)), N'') IS NOT NULL
+)
+UPDATE d
+SET d.Classification = COALESCE(d.Classification, source.Classification),
+    d.InsuranceType = COALESCE(d.InsuranceType, source.InsuranceType),
+    d.PurchaseDate = COALESCE(d.PurchaseDate, source.PurchaseDate),
+    d.ExpiryDate = COALESCE(d.ExpiryDate, source.ExpiryDate),
+    d.Quantity = COALESCE(d.Quantity, source.Quantity)
+FROM dbo.Devices AS d
+INNER JOIN ExistingRequestDevices AS source ON source.Equipment = d.DeviceName AND source.RowNum = 1;
+
+/* Khởi tạo danh mục từ thiết bị đã có trong phiếu, không sửa/xóa dữ liệu phiếu gốc. */
+INSERT INTO dbo.Devices (DeviceName, Year, Classification, InsuranceType, Department, PurchaseDate, ExpiryDate, Quantity, Value, InsuranceFee, Status, Supplier)
+SELECT source.Equipment,
+       YEAR(source.PurchaseDate),
+       source.Classification,
+       source.InsuranceType,
+       source.DepartmentProject,
+       source.PurchaseDate,
+       source.ExpiryDate,
+       source.Quantity,
+       source.Value,
+       source.Premium,
+       CASE WHEN source.ExpiryDate IS NOT NULL AND CONVERT(date, source.ExpiryDate) < CONVERT(date, GETDATE())
+            THEN N'Hết hạn' ELSE N'Đang sử dụng' END,
+       source.Supplier
+FROM
+(
+    SELECT a.Equipment, a.PurchaseDate, r.Classification, a.InsuranceType, r.DepartmentProject,
+           a.ExpiryDate, a.Quantity,
+           a.Value, a.Premium, a.Supplier,
+           ROW_NUMBER() OVER (PARTITION BY a.Equipment ORDER BY a.Id) AS RowNum
+    FROM dbo.RequestAssets AS a
+    INNER JOIN dbo.Requests AS r ON r.Id = a.RequestId
+    WHERE NULLIF(LTRIM(RTRIM(a.Equipment)), N'') IS NOT NULL
+) AS source
+WHERE source.RowNum = 1
+  AND NOT EXISTS (SELECT 1 FROM dbo.Devices AS d WHERE d.DeviceName = source.Equipment);
+
+/* Seed danh mục thiết bị mẫu; chạy lại script điền các trường seed còn trống. */
+;MERGE dbo.Devices AS target
+USING
+(
+    VALUES
+        (N'Tủ lạnh', 2026, N'Thiết bị', N'Bảo hiểm trách nhiệm bên thứ ba', N'Dự án 01', CONVERT(datetime, '20261007', 112), CONVERT(datetime, '20271007', 112), 1, CAST(20000000 AS decimal(18,2)), CAST(100000 AS decimal(18,2)), N'Đang sử dụng', N'Công ty Thiết bị Á Châu'),
+        (N'Máy phát điện', 2024, N'Thiết bị', N'Bảo hiểm thiết bị', N'Dự án 02', CONVERT(datetime, '20260115', 112), CONVERT(datetime, '20270115', 112), 1, CAST(185000000 AS decimal(18,2)), CAST(925000 AS decimal(18,2)), N'Đang sử dụng', N'Công ty Cơ điện Việt'),
+        (N'Xe nâng hàng', 2023, N'Phương tiện', N'Bảo hiểm phương tiện', N'Kho vận', CONVERT(datetime, '20260310', 112), CONVERT(datetime, '20270310', 112), 1, CAST(420000000 AS decimal(18,2)), CAST(2100000 AS decimal(18,2)), N'Đang sử dụng', N'Công ty Xe nâng Miền Nam'),
+        (N'Máy móc thi công', 2025, N'Tài sản', N'Bảo hiểm mọi rủi ro', N'Dự án 01', CONVERT(datetime, '20260201', 112), CONVERT(datetime, '20270201', 112), 1, CAST(760000000 AS decimal(18,2)), CAST(3800000 AS decimal(18,2)), N'Đang sử dụng', N'Công ty Xây dựng và Thiết bị'),
+        (N'Máy in văn phòng', 2022, N'Thiết bị', N'Bảo hiểm tài sản', N'Phòng Hành chính', CONVERT(datetime, '20260105', 112), CONVERT(datetime, '20270105', 112), 1, CAST(18000000 AS decimal(18,2)), CAST(90000 AS decimal(18,2)), N'Đang sử dụng', N'Công ty Văn phòng phẩm Việt')
+) AS seed(DeviceName, Year, Classification, InsuranceType, Department, PurchaseDate, ExpiryDate, Quantity, Value, InsuranceFee, Status, Supplier)
+ON target.DeviceName = seed.DeviceName
+WHEN MATCHED THEN
+    UPDATE SET Year = COALESCE(target.Year, seed.Year),
+               Classification = COALESCE(target.Classification, seed.Classification),
+               InsuranceType = COALESCE(target.InsuranceType, seed.InsuranceType),
+               Department = COALESCE(target.Department, seed.Department),
+               PurchaseDate = COALESCE(target.PurchaseDate, seed.PurchaseDate),
+               ExpiryDate = COALESCE(target.ExpiryDate, seed.ExpiryDate),
+               Quantity = COALESCE(target.Quantity, seed.Quantity),
+               Value = CASE WHEN target.Value = 0 THEN seed.Value ELSE target.Value END,
+               InsuranceFee = CASE WHEN target.InsuranceFee = 0 THEN seed.InsuranceFee ELSE target.InsuranceFee END,
+               Status = COALESCE(target.Status, seed.Status),
+               Supplier = COALESCE(target.Supplier, seed.Supplier)
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (DeviceName, Year, Classification, InsuranceType, Department, PurchaseDate, ExpiryDate, Quantity, Value, InsuranceFee, Status, Supplier)
+    VALUES (seed.DeviceName, seed.Year, seed.Classification, seed.InsuranceType, seed.Department,
+            seed.PurchaseDate, seed.ExpiryDate, seed.Quantity,
+            seed.Value, seed.InsuranceFee, seed.Status, seed.Supplier);
+
 IF OBJECT_ID(N'dbo.RequestAttachments', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.RequestAttachments

@@ -1,0 +1,62 @@
+@{
+    ViewBag.Title = "Thông tin thiết bị";
+    var deviceId = ViewBag.DeviceId == null ? 0 : (int)ViewBag.DeviceId;
+}
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.common.css" />
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.light.css" />
+<style>
+    .device-display-card { --grid-text: #263238; --grid-heading: #35414c; --grid-border: #d9dfe6; --grid-header: #edf1f5; --grid-stripe: #fafbfd; --grid-hover: #f1f7ff; --grid-accent: #337ab7; margin: 24px auto; padding: 22px; background: #fff; color: var(--grid-text); border: 1px solid var(--grid-border); border-radius: 6px; box-shadow: 0 8px 24px rgba(30, 50, 80, .08); }
+    .device-display-title { margin: 0 0 18px; padding: 12px 15px; color: var(--grid-heading); background: var(--grid-header); border: 1px solid var(--grid-border); border-left: 4px solid var(--grid-accent); border-radius: 4px; font-size: 20px; font-weight: 700; }
+    #deviceDetails { padding: 4px 8px; }
+    #deviceDetails .dx-field-item-label-text { color: var(--grid-heading); font-weight: 600; }
+    #deviceDetails .dx-texteditor { background: var(--grid-stripe); border-color: var(--grid-border); }
+    #deviceDetails .dx-texteditor-input { color: var(--grid-text); }
+    #deviceDetails .dx-field-item { border-bottom: 1px solid var(--grid-border); }
+    .device-display-back { color: var(--grid-accent); border-color: var(--grid-accent); }
+    .device-display-back:hover { color: #fff; background: var(--grid-accent); border-color: var(--grid-accent); }
+</style>
+
+<section class="device-display-card">
+    <h1 id="deviceDisplayTitle" class="device-display-title">Thông tin thiết bị</h1>
+    <div id="deviceDisplayError" class="alert alert-danger d-none"></div>
+    <div id="deviceDetails"></div>
+    <div class="d-flex justify-content-end mt-4">
+        <a class="btn btn-outline-primary device-display-back" href="@Url.Action("Index", "Device")">Quay lại danh sách</a>
+    </div>
+</section>
+
+@section scripts {
+    <script src="https://cdn3.devexpress.com/jslib/22.2.6/js/dx.all.js"></script>
+    <script>
+        $(function () {
+            var apiUrl = '@Url.Content("~/api/deviceapi")/@deviceId';
+            $.getJSON(apiUrl).done(function (device) {
+                $("#deviceDisplayTitle").text(device.DeviceName || "Thông tin thiết bị");
+                $("#deviceDetails").dxForm({
+                    formData: device,
+                    readOnly: true,
+                    colCount: 2,
+                    labelLocation: "top",
+                    items: [
+                        { dataField: "DeviceId", label: { text: "Mã thiết bị" } },
+                        { dataField: "DeviceName", label: { text: "Tên thiết bị" } },
+                        { dataField: "Year", label: { text: "Năm" } },
+                        { dataField: "Classification", label: { text: "Phân loại" } },
+                        { dataField: "InsuranceType", label: { text: "Loại bảo hiểm" } },
+                        { dataField: "Department", label: { text: "Bộ phận/Dự án" } },
+                        { dataField: "PurchaseDate", editorType: "dxDateBox", editorOptions: { displayFormat: "dd/MM/yy" }, label: { text: "Ngày mua bảo hiểm" } },
+                        { dataField: "ExpiryDate", editorType: "dxDateBox", editorOptions: { displayFormat: "dd/MM/yy" }, label: { text: "Ngày đến hạn" } },
+                        { dataField: "Quantity", label: { text: "Số lượng" } },
+                        { dataField: "Value", editorType: "dxNumberBox", editorOptions: { format: "#,##0.##" }, label: { text: "Giá trị" } },
+                        { dataField: "InsuranceFee", editorType: "dxNumberBox", editorOptions: { format: "#,##0.##" }, label: { text: "Phí bảo hiểm" } },
+                        { dataField: "Supplier", label: { text: "Nhà cung cấp" } },
+                        { dataField: "Status", label: { text: "Trạng thái" } }
+                    ]
+                });
+            }).fail(function (xhr) {
+                var message = xhr.status === 404 ? "Không tìm thấy thiết bị trong danh mục." : "Không tải được thông tin thiết bị.";
+                $("#deviceDisplayError").text(message).removeClass("d-none");
+            });
+        });
+    </script>
+}

@@ -1,0 +1,114 @@
+@{
+    ViewBag.Title = "Thêm thiết bị";
+}
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.common.css" />
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.light.css" />
+<style>
+    .device-form-grid > [class*="col-"] { display: flex; flex-direction: column; }
+    .device-form-grid .form-label { min-height: 24px; margin-bottom: 8px; }
+    .device-form-grid .dx-widget,
+    .device-form-grid .dx-texteditor { width: 100%; }
+</style>
+
+<div class="card shadow-sm my-4">
+    <div class="card-body">
+        <h1 class="h4 mb-4">Thêm thiết bị vào danh mục</h1>
+        <div id="deviceCreateError" class="alert alert-danger d-none"></div>
+        <div class="row g-3 device-form-grid">
+            <div class="col-md-4"><label class="form-label">Tên thiết bị *</label><div id="deviceName"></div></div>
+            <div class="col-md-4"><label class="form-label">Năm</label><div id="deviceYear"></div></div>
+            <div class="col-md-4"><label class="form-label">Phân loại</label><div id="deviceCategory"></div></div>
+            <div class="col-md-4"><label class="form-label">Loại bảo hiểm</label><div id="deviceInsuranceType"></div></div>
+            <div class="col-md-4"><label class="form-label">Bộ phận/Dự án</label><div id="deviceDepartment"></div></div>
+            <div class="col-md-4"><label class="form-label">Ngày mua bảo hiểm *</label><div id="devicePurchaseDate"></div></div>
+            <div class="col-md-4"><label class="form-label">Ngày đến hạn</label><div id="deviceExpiryDate"></div></div>
+            <div class="col-md-4"><label class="form-label">Số lượng</label><div id="deviceQuantity"></div></div>
+            <div class="col-md-4"><label class="form-label">Giá trị</label><div id="deviceValue"></div></div>
+            <div class="col-md-4"><label class="form-label">Phí bảo hiểm</label><div id="deviceInsuranceFee"></div></div>
+            <div class="col-md-4"><label class="form-label">Nhà cung cấp</label><div id="deviceSupplier"></div></div>
+            <div class="col-md-4"><label class="form-label">Trạng thái</label><div id="deviceStatus"></div></div>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-4">
+            <a class="btn btn-outline-secondary" href="@Url.Action("Index", "Device")">Thoát</a>
+            <div id="saveDevice"></div>
+        </div>
+    </div>
+</div>
+
+@section scripts {
+    <script src="https://cdn3.devexpress.com/jslib/22.2.6/js/dx.all.js"></script>
+    <script>
+        $(function () {
+            var apiUrl = '@Url.Content("~/api/deviceapi")';
+            var name = $("#deviceName").dxTextBox({ placeholder: "Nhập tên thiết bị", maxLength: 250 }).dxTextBox("instance");
+            var year = $("#deviceYear").dxNumberBox({ value: null, min: 1900, max: 2200, showSpinButtons: true, showClearButton: true, placeholder: "Chọn năm" }).dxNumberBox("instance");
+            var category = $("#deviceCategory").dxSelectBox({
+                dataSource: ["Mới", "Gia hạn", "Thiết bị", "Tài sản", "Phương tiện", "Vật tư"],
+                searchEnabled: true, showClearButton: true, placeholder: "Chọn phân loại"
+            }).dxSelectBox("instance");
+            var insuranceType = $("#deviceInsuranceType").dxSelectBox({
+                dataSource: ["Bảo hiểm mọi rủi ro", "Bảo hiểm trách nhiệm bên thứ ba", "Bảo hiểm tài sản", "Bảo hiểm thiết bị", "Bảo hiểm phương tiện"],
+                searchEnabled: true, showClearButton: true, placeholder: "Chọn loại bảo hiểm"
+            }).dxSelectBox("instance");
+            var department = $("#deviceDepartment").dxSelectBox({
+                dataSource: ["Dự án 01", "Dự án 02", "Phòng Hành chính", "Kho vận", "Phòng kỹ thuật"],
+                searchEnabled: true, showClearButton: true, placeholder: "Chọn bộ phận/dự án"
+            }).dxSelectBox("instance");
+            var purchaseDate = $("#devicePurchaseDate").dxDateBox({ type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true }).dxDateBox("instance");
+            var expiryDate = $("#deviceExpiryDate").dxDateBox({ type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true, showClearButton: true }).dxDateBox("instance");
+            var quantity = $("#deviceQuantity").dxNumberBox({ value: 1, min: 1, showSpinButtons: true, showClearButton: true }).dxNumberBox("instance");
+            var value = $("#deviceValue").dxNumberBox({ value: null, min: 0, format: "#,##0.##", showClearButton: true, placeholder: "0" }).dxNumberBox("instance");
+            var fee = $("#deviceInsuranceFee").dxNumberBox({ value: null, min: 0, format: "#,##0.##", showClearButton: true, placeholder: "0" }).dxNumberBox("instance");
+            var supplier = $("#deviceSupplier").dxTextBox({ maxLength: 200 }).dxTextBox("instance");
+            var status = $("#deviceStatus").dxSelectBox({ items: ["Đang sử dụng", "Ngừng sử dụng"], value: "Đang sử dụng" }).dxSelectBox("instance");
+
+            function showError(message) {
+                $("#deviceCreateError").text(message || "Không lưu được thiết bị.").removeClass("d-none");
+            }
+
+            $("#saveDevice").dxButton({
+                text: "Lưu thiết bị", icon: "save", type: "default", stylingMode: "contained",
+                onClick: function () {
+                    $("#deviceCreateError").addClass("d-none").empty();
+                    if (!name.option("value") || !name.option("value").trim()) {
+                        showError("Vui lòng nhập tên thiết bị.");
+                        return;
+                    }
+                    if (!purchaseDate.option("value")) {
+                        showError("Vui lòng nhập ngày mua bảo hiểm.");
+                        return;
+                    }
+                    $.ajax({
+                        url: apiUrl,
+                        method: "POST",
+                        contentType: "application/json; charset=utf-8",
+                        data: JSON.stringify({
+                            DeviceName: name.option("value").trim(),
+                            Year: year.option("value"),
+                            Classification: category.option("value"),
+                            InsuranceType: insuranceType.option("value"),
+                            Department: department.option("value"),
+                            PurchaseDate: toLocalDateString(purchaseDate.option("value")),
+                            ExpiryDate: toLocalDateString(expiryDate.option("value")),
+                            Quantity: quantity.option("value") || 1,
+                            Value: value.option("value") || 0,
+                            InsuranceFee: fee.option("value") || 0,
+                            Supplier: supplier.option("value"),
+                            Status: status.option("value")
+                        })
+                    }).done(function () {
+                        window.location.href = '@Url.Action("Index", "Device")';
+                    }).fail(function (xhr) {
+                        var response = xhr.responseJSON;
+                        showError(response && (response.Message || response.message) || xhr.responseText);
+                    });
+                }
+            });
+
+            function toLocalDateString(date) {
+                if (!date) return null;
+                return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+            }
+        });
+    </script>
+}

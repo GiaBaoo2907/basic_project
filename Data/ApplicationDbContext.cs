@@ -10,6 +10,7 @@ namespace DeviceManagement.Data
         public DbSet<Request> Requests { get; set; }
         public DbSet<RequestAsset> RequestAssets { get; set; }
         public DbSet<RequestAttachment> RequestAttachments { get; set; }
+        public DbSet<Device> Devices { get; set; }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {
@@ -20,6 +21,7 @@ namespace DeviceManagement.Data
             modelBuilder.Entity<Request>().Property(x => x.Code).IsRequired();
             modelBuilder.Entity<RequestAsset>().ToTable("RequestAssets");
             modelBuilder.Entity<RequestAttachment>().ToTable("RequestAttachments");
+            modelBuilder.Entity<Device>().ToTable("Devices");
         }
     }
 }
