@@ -6,14 +6,85 @@
     <title>@ViewBag.Title</title>
     @Styles.Render("~/Content/css")
     @Scripts.Render("~/bundles/modernizr")
+    <link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.common.css" />
+    <link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.light.css" />
+
+    <style>
+        html,
+        body {
+            min-height: 100%;
+            margin: 0;
+        }
+
+        .app-shell {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .app-sidebar {
+            flex: 0 0 280px;
+            padding: 20px 12px;
+            background: #f5f6f8;
+            border-right: 1px solid #ddd;
+        }
+
+        .app-brand {
+            margin: 0 0 20px;
+            padding: 0 12px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        #sidebar-menu {
+            width: 100%;
+        }
+
+        .app-content {
+            flex: 1;
+            min-width: 0;
+            padding: 24px;
+        }
+
+        @@media (max-width: 768px) {
+            .app-shell {
+                flex-direction: column;
+            }
+
+            .app-sidebar {
+                flex-basis: auto;
+                border-right: 0;
+                border-bottom: 1px solid #ddd;
+            }
+
+            .app-content {
+                padding: 16px;
+            }
+        }
+    </style>
+    
 </head>
 <body>
-    <div class="container body-content">
-        @RenderBody()
+    <div class="app-shell">
+        <aside class="app-sidebar">
+            <div class="app-brand">Device Manage</div>
+            <div id="sidebar-menu"></div>
+        </aside>
+        <main class="app-content">
+            @RenderBody()
+        </main>
     </div>
-
+    
     @Scripts.Render("~/bundles/jquery")
     @Scripts.Render("~/bundles/bootstrap")
+
+    <script src="https://cdn3.devexpress.com/jslib/22.2.6/js/dx.all.js"></script>
+    
+    <script>
+        window.appBaseUrl = '@Url.Content("~/")';
+    </script>
+    <script src="@Url.Content("~/Data/sidebar-data.js")"></script>
+    <script src="@Url.Content("~/Data/sidebar.js")"></script>
+    
     @RenderSection("scripts", required: false)
 </body>
 </html>

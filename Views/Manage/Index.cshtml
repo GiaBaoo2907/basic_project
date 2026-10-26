@@ -1,0 +1,60 @@
+@{
+    ViewBag.Title = "Cấu trúc danh mục";
+}
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.light.css" />
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.common.css" />
+
+<div class="mb-3">
+    <h1 class="h3">Cấu trúc danh mục điều hướng</h1>
+    <p class="text-muted mb-0">Trang chỉ hiển thị các nhóm cha và danh mục con trong thanh điều hướng.</p>
+</div>
+
+<div id="module-tree"></div>
+
+@section scripts{
+    <!-- <script src="https://cdn3.devexpress.com/jslib/22.2.6/js/dx.all.js"></script> -->
+    <script>
+        $(function () {
+            var treeRows = [];
+
+            function addItems(items, parentId) {
+                items.forEach(function (item) {
+                    treeRows.push({
+                        id: item.id,
+                        parentId: parentId,
+                        text: item.text,
+                        icon: item.icon || ""
+                    });
+
+                    if (item.items && item.items.length) {
+                        addItems(item.items, item.id);
+                    }
+                });
+            }
+
+            if (typeof sidebar === "undefined" || !Array.isArray(sidebar)) {
+                console.error("Không tìm thấy dữ liệu thanh điều hướng (sidebar-data.js).");
+                $("#module-tree").text("Không tải được cấu trúc danh mục.");
+                return;
+            }
+
+            addItems(sidebar, null);
+
+            $("#module-tree").dxTreeList({
+                dataSource: treeRows,
+                keyExpr: "id",
+                parentIdExpr: "parentId",
+                rootValue: null,
+                dataStructure: "plain",
+                autoExpandAll: true,
+                showBorders: true,
+                columnAutoWidth: true,
+                columns: [
+                    { dataField: "text", caption: "Nhóm / danh mục" },
+                    { dataField: "id", caption: "Mã", width: 120 },
+                    { dataField: "icon", caption: "Biểu tượng", width: 150 }
+                ]
+            });
+        });
+    </script>
+}
