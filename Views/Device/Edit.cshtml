@@ -26,6 +26,7 @@
     <script>
         $(function () {
             var apiUrl = '@Url.Content("~/api/deviceapi")/@deviceId';
+            var catalogApiUrl = '@Url.Content("~/api/catalogapi")';
             var form;
             function showError(message) { $("#deviceEditError").text(message || "Không tải hoặc lưu được thiết bị.").removeClass("d-none"); }
             function dateString(value) {
@@ -40,23 +41,73 @@
                 device.PurchaseDate = dateValue(device.PurchaseDate);
                 device.ExpiryDate = dateValue(device.ExpiryDate);
                 $("#deviceEditTitle").text(device.DeviceName || "Chỉnh sửa thiết bị");
-                form = $("#deviceEditForm").dxForm({
-                    formData: device, colCount: 3, labelLocation: "top",
-                    items: [
-                        { dataField: "DeviceName", label: { text: "Tên thiết bị *" }, isRequired: true, validationRules: [{ type: "required", message: "Vui lòng nhập tên thiết bị." }] },
-                        { dataField: "Year", label: { text: "Năm" }, editorType: "dxNumberBox", editorOptions: { min: 1900, max: 2200, showSpinButtons: true } },
-                        { dataField: "Classification", label: { text: "Phân loại" }, editorType: "dxSelectBox", editorOptions: { dataSource: ["Mới", "Gia hạn", "Thiết bị", "Tài sản", "Phương tiện", "Vật tư"], searchEnabled: true, showClearButton: true } },
-                        { dataField: "InsuranceType", label: { text: "Loại bảo hiểm" }, editorType: "dxSelectBox", editorOptions: { dataSource: ["Bảo hiểm mọi rủi ro", "Bảo hiểm trách nhiệm bên thứ ba", "Bảo hiểm tài sản", "Bảo hiểm thiết bị", "Bảo hiểm phương tiện"], searchEnabled: true, showClearButton: true } },
-                        { dataField: "Department", label: { text: "Bộ phận/Dự án" }, editorType: "dxSelectBox", editorOptions: { dataSource: ["Dự án 01", "Dự án 02", "Phòng Hành chính", "Kho vận", "Phòng kỹ thuật"], searchEnabled: true, showClearButton: true } },
-                        { dataField: "PurchaseDate", label: { text: "Ngày mua bảo hiểm *" }, editorType: "dxDateBox", editorOptions: { type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true }, isRequired: true, validationRules: [{ type: "required", message: "Vui lòng nhập ngày mua bảo hiểm." }] },
-                        { dataField: "ExpiryDate", label: { text: "Ngày đến hạn" }, editorType: "dxDateBox", editorOptions: { type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true, showClearButton: true } },
-                        { dataField: "Quantity", label: { text: "Số lượng" }, editorType: "dxNumberBox", editorOptions: { min: 1, showSpinButtons: true } },
-                        { dataField: "Value", label: { text: "Giá trị" }, editorType: "dxNumberBox", editorOptions: { min: 0, format: "#,##0.##" } },
-                        { dataField: "InsuranceFee", label: { text: "Phí bảo hiểm" }, editorType: "dxNumberBox", editorOptions: { min: 0, format: "#,##0.##" } },
-                        { dataField: "Supplier", label: { text: "Nhà cung cấp" } },
-                        { dataField: "Status", label: { text: "Trạng thái" }, editorType: "dxSelectBox", editorOptions: { items: ["Đang sử dụng", "Ngừng sử dụng"] } }
-                    ]
-                }).dxForm("instance");
+                $.when(
+                    $.getJSON(catalogApiUrl + "/materials"),
+                    $.getJSON(catalogApiUrl + "/classifications"),
+                    $.getJSON(catalogApiUrl + "/projects"),
+                    $.getJSON(catalogApiUrl + "/statuses"),
+                    $.getJSON(catalogApiUrl + "/units"),
+                    $.getJSON(catalogApiUrl + "/insurance-types"),
+                    $.getJSON(catalogApiUrl + "/suppliers")
+                ).done(function (materials, classifications, projects, statuses, units, insuranceTypes, suppliers) {
+                    var materialOptions = materials[0];
+                    var selectedMaterial = materialOptions.find(function (item) { return item.Code === device.MaterialCode; });
+                    if (selectedMaterial) {
+                        device.DeviceName = selectedMaterial.Name;
+                        device.Classification = selectedMaterial.Classification || device.Classification;
+                        device.UnitOfMeasure = selectedMaterial.UnitOfMeasure || device.UnitOfMeasure;
+                    }
+                    var classificationOptions = classifications[0].map(function (item) { return item.Name; });
+                    var projectOptions = projects[0].map(function (item) { return item.Name; });
+                    var statusOptions = statuses[0].map(function (item) { return item.Name; });
+                    var unitOptions = units[0].map(function (item) { return item.Name; });
+                    var insuranceTypeOptions = insuranceTypes[0].map(function (item) { return item.Name; });
+                    var supplierOptions = suppliers[0].map(function (item) { return item.Name; });
+                    form = $("#deviceEditForm").dxForm({
+                        formData: device, colCount: 3, labelLocation: "top",
+                        onFieldDataChanged: function (e) {
+                            if (e.dataField !== "MaterialCode") return;
+                            var selectedMaterial = materialOptions.find(function (item) {
+                                return item.Code === e.value;
+                            });
+                            e.component.updateData("DeviceName", selectedMaterial && selectedMaterial.Name || null);
+                            e.component.updateData("Classification", selectedMaterial && selectedMaterial.Classification || null);
+                            e.component.updateData("UnitOfMeasure", selectedMaterial && selectedMaterial.UnitOfMeasure || null);
+                        },
+                        items: [
+                            {
+                                dataField: "MaterialCode",
+                                label: { text: "Tên thiết bị / Mã vật tư *" },
+                                editorType: "dxSelectBox",
+                                editorOptions: {
+                                    dataSource: materialOptions,
+                                    displayExpr: function (item) { return item ? item.Name + " — " + item.Code : ""; },
+                                    valueExpr: "Code",
+                                    searchEnabled: true,
+                                    showClearButton: true,
+                                    acceptCustomValue: false,
+                                    placeholder: "Chọn vật tư theo mã trong danh mục"
+                                },
+                                isRequired: true,
+                                validationRules: [{ type: "required", message: "Vui lòng chọn mã vật tư từ danh mục Quản trị." }]
+                            },
+                            { dataField: "Year", label: { text: "Năm" }, editorType: "dxNumberBox", editorOptions: { min: 1900, max: 2200, showSpinButtons: true } },
+                            { dataField: "Classification", label: { text: "Phân loại" }, editorType: "dxSelectBox", editorOptions: { dataSource: classificationOptions, searchEnabled: true, showClearButton: true } },
+                            { dataField: "InsuranceType", label: { text: "Loại bảo hiểm" }, editorType: "dxSelectBox", editorOptions: { dataSource: insuranceTypeOptions, searchEnabled: true, showClearButton: true } },
+                            { dataField: "Department", label: { text: "Bộ phận/Dự án" }, editorType: "dxSelectBox", editorOptions: { dataSource: projectOptions, searchEnabled: true, showClearButton: true } },
+                            { dataField: "PurchaseDate", label: { text: "Ngày mua bảo hiểm *" }, editorType: "dxDateBox", editorOptions: { type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true }, isRequired: true, validationRules: [{ type: "required", message: "Vui lòng nhập ngày mua bảo hiểm." }] },
+                            { dataField: "ExpiryDate", label: { text: "Ngày đến hạn" }, editorType: "dxDateBox", editorOptions: { type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true, showClearButton: true } },
+                            { dataField: "Quantity", label: { text: "Số lượng" }, editorType: "dxNumberBox", editorOptions: { min: 1, showSpinButtons: true } },
+                            { dataField: "UnitOfMeasure", label: { text: "Đơn vị tính" }, editorType: "dxSelectBox", editorOptions: { dataSource: unitOptions, searchEnabled: true, showClearButton: true } },
+                            { dataField: "Value", label: { text: "Giá trị" }, editorType: "dxNumberBox", editorOptions: { min: 0, format: "#,##0.##" } },
+                            { dataField: "InsuranceFee", label: { text: "Phí bảo hiểm" }, editorType: "dxNumberBox", editorOptions: { min: 0, format: "#,##0.##" } },
+                            { dataField: "Supplier", label: { text: "Nhà cung cấp" }, editorType: "dxSelectBox", editorOptions: { dataSource: supplierOptions, searchEnabled: true, showClearButton: true } },
+                            { dataField: "Status", label: { text: "Trạng thái" }, editorType: "dxSelectBox", editorOptions: { dataSource: statusOptions, searchEnabled: true } }
+                        ]
+                    }).dxForm("instance");
+                }).fail(function (xhr) {
+                    showError(xhr.responseJSON && (xhr.responseJSON.Message || xhr.responseJSON.message) || "Không tải được dữ liệu danh mục.");
+                });
             }).fail(function (xhr) {
                 showError(xhr.status === 404 ? "Không tìm thấy thiết bị trong danh mục." : "Không tải được thông tin thiết bị.");
             });

@@ -12,17 +12,18 @@
 
 <div class="card shadow-sm my-4">
     <div class="card-body">
-        <h1 class="h4 mb-4">Thêm thiết bị vào danh mục</h1>
+        <h1 class="h4 mb-4">Thêm thiết bị</h1>
         <div id="deviceCreateError" class="alert alert-danger d-none"></div>
         <div class="row g-3 device-form-grid">
-            <div class="col-md-4"><label class="form-label">Tên thiết bị *</label><div id="deviceName"></div></div>
+            <div class="col-md-4"><label class="form-label">Tên thiết bị <span class="text-danger">*</span></label><div id="deviceName"></div></div>
             <div class="col-md-4"><label class="form-label">Năm</label><div id="deviceYear"></div></div>
             <div class="col-md-4"><label class="form-label">Phân loại</label><div id="deviceCategory"></div></div>
             <div class="col-md-4"><label class="form-label">Loại bảo hiểm</label><div id="deviceInsuranceType"></div></div>
             <div class="col-md-4"><label class="form-label">Bộ phận/Dự án</label><div id="deviceDepartment"></div></div>
-            <div class="col-md-4"><label class="form-label">Ngày mua bảo hiểm *</label><div id="devicePurchaseDate"></div></div>
+            <div class="col-md-4"><label class="form-label">Ngày lập</label><div id="devicePurchaseDate"></div></div>
             <div class="col-md-4"><label class="form-label">Ngày đến hạn</label><div id="deviceExpiryDate"></div></div>
             <div class="col-md-4"><label class="form-label">Số lượng</label><div id="deviceQuantity"></div></div>
+            <div class="col-md-4"><label class="form-label">Đơn vị tính</label><div id="deviceUnit"></div></div>
             <div class="col-md-4"><label class="form-label">Giá trị</label><div id="deviceValue"></div></div>
             <div class="col-md-4"><label class="form-label">Phí bảo hiểm</label><div id="deviceInsuranceFee"></div></div>
             <div class="col-md-4"><label class="form-label">Nhà cung cấp</label><div id="deviceSupplier"></div></div>
@@ -40,38 +41,87 @@
     <script>
         $(function () {
             var apiUrl = '@Url.Content("~/api/deviceapi")';
-            var name = $("#deviceName").dxTextBox({ placeholder: "Nhập tên thiết bị", maxLength: 250 }).dxTextBox("instance");
+            var catalogApiUrl = '@Url.Content("~/api/catalogapi")';
+            var catalogsLoaded = false;
+            var name = $("#deviceName").dxSelectBox({
+                dataSource: [],
+                displayExpr: function (item) { return item ? item.Name + " — " + item.Code : ""; },
+                valueExpr: "Code",
+                searchEnabled: true,
+                showClearButton: true,
+                acceptCustomValue: false,
+                disabled: true,
+                placeholder: "Chọn vật tư",
+                onValueChanged: function (e) {
+                    var selectedMaterial = e.component.option("selectedItem");
+                    category.option("value", selectedMaterial && selectedMaterial.Classification || null);
+                    unit.option("value", selectedMaterial && selectedMaterial.UnitOfMeasure || null);
+                }
+            }).dxSelectBox("instance");
             var year = $("#deviceYear").dxNumberBox({ value: null, min: 1900, max: 2200, showSpinButtons: true, showClearButton: true, placeholder: "Chọn năm" }).dxNumberBox("instance");
             var category = $("#deviceCategory").dxSelectBox({
-                dataSource: ["Mới", "Gia hạn", "Thiết bị", "Tài sản", "Phương tiện", "Vật tư"],
+                dataSource: [],
                 searchEnabled: true, showClearButton: true, placeholder: "Chọn phân loại"
             }).dxSelectBox("instance");
             var insuranceType = $("#deviceInsuranceType").dxSelectBox({
-                dataSource: ["Bảo hiểm mọi rủi ro", "Bảo hiểm trách nhiệm bên thứ ba", "Bảo hiểm tài sản", "Bảo hiểm thiết bị", "Bảo hiểm phương tiện"],
+                dataSource: [],
                 searchEnabled: true, showClearButton: true, placeholder: "Chọn loại bảo hiểm"
             }).dxSelectBox("instance");
             var department = $("#deviceDepartment").dxSelectBox({
-                dataSource: ["Dự án 01", "Dự án 02", "Phòng Hành chính", "Kho vận", "Phòng kỹ thuật"],
+                dataSource: [],
                 searchEnabled: true, showClearButton: true, placeholder: "Chọn bộ phận/dự án"
             }).dxSelectBox("instance");
             var purchaseDate = $("#devicePurchaseDate").dxDateBox({ type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true }).dxDateBox("instance");
             var expiryDate = $("#deviceExpiryDate").dxDateBox({ type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true, showClearButton: true }).dxDateBox("instance");
             var quantity = $("#deviceQuantity").dxNumberBox({ value: 1, min: 1, showSpinButtons: true, showClearButton: true }).dxNumberBox("instance");
+            var unit = $("#deviceUnit").dxSelectBox({ dataSource: [], searchEnabled: true, showClearButton: true, placeholder: "Chọn đơn vị tính" }).dxSelectBox("instance");
             var value = $("#deviceValue").dxNumberBox({ value: null, min: 0, format: "#,##0.##", showClearButton: true, placeholder: "0" }).dxNumberBox("instance");
             var fee = $("#deviceInsuranceFee").dxNumberBox({ value: null, min: 0, format: "#,##0.##", showClearButton: true, placeholder: "0" }).dxNumberBox("instance");
-            var supplier = $("#deviceSupplier").dxTextBox({ maxLength: 200 }).dxTextBox("instance");
-            var status = $("#deviceStatus").dxSelectBox({ items: ["Đang sử dụng", "Ngừng sử dụng"], value: "Đang sử dụng" }).dxSelectBox("instance");
+            var supplier = $("#deviceSupplier").dxSelectBox({
+                dataSource: [],
+                searchEnabled: true, showClearButton: true, placeholder: "Chọn nhà cung cấp"
+            }).dxSelectBox("instance");
+            var status = $("#deviceStatus").dxSelectBox({ dataSource: [], displayExpr: "Name", valueExpr: "Name", searchEnabled: true, placeholder: "Chọn tình trạng" }).dxSelectBox("instance");
 
             function showError(message) {
                 $("#deviceCreateError").text(message || "Không lưu được thiết bị.").removeClass("d-none");
             }
 
+            $.when(
+                $.getJSON(catalogApiUrl + "/materials"),
+                $.getJSON(catalogApiUrl + "/classifications"),
+                $.getJSON(catalogApiUrl + "/projects"),
+                $.getJSON(catalogApiUrl + "/statuses"),
+                $.getJSON(catalogApiUrl + "/units"),
+                $.getJSON(catalogApiUrl + "/insurance-types"),
+                $.getJSON(catalogApiUrl + "/suppliers")
+            ).done(function (materials, classifications, projects, statuses, units, insuranceTypes, suppliers) {
+                name.option("dataSource", materials[0]);
+                name.option("disabled", false);
+                category.option("dataSource", classifications[0].map(function (item) { return item.Name; }));
+                department.option("dataSource", projects[0].map(function (item) { return item.Name; }));
+                status.option("dataSource", statuses[0]);
+                unit.option("dataSource", units[0].map(function (item) { return item.Name; }));
+                insuranceType.option("dataSource", insuranceTypes[0].map(function (item) { return item.Name; }));
+                supplier.option("dataSource", suppliers[0].map(function (item) { return item.Name; }));
+                var defaultStatus = statuses[0].find(function (item) { return item.Name === "Đang sử dụng"; });
+                if (defaultStatus) status.option("value", defaultStatus.Name);
+                catalogsLoaded = true;
+            }).fail(function (xhr) {
+                var response = xhr.responseJSON;
+                showError(response && (response.Message || response.message) || "Không tải được danh mục vật tư hoặc các danh mục liên quan.");
+            });
+
             $("#saveDevice").dxButton({
                 text: "Lưu thiết bị", icon: "save", type: "default", stylingMode: "contained",
                 onClick: function () {
                     $("#deviceCreateError").addClass("d-none").empty();
-                    if (!name.option("value") || !name.option("value").trim()) {
-                        showError("Vui lòng nhập tên thiết bị.");
+                    if (!catalogsLoaded) {
+                        showError("Danh mục chưa tải xong hoặc không tải được. Vui lòng tải lại trang.");
+                        return;
+                    }
+                    if (!name.option("value")) {
+                        showError("Vui lòng chọn thiết bị");
                         return;
                     }
                     if (!purchaseDate.option("value")) {
@@ -83,7 +133,7 @@
                         method: "POST",
                         contentType: "application/json; charset=utf-8",
                         data: JSON.stringify({
-                            DeviceName: name.option("value").trim(),
+                            MaterialCode: name.option("value"),
                             Year: year.option("value"),
                             Classification: category.option("value"),
                             InsuranceType: insuranceType.option("value"),
@@ -91,6 +141,7 @@
                             PurchaseDate: toLocalDateString(purchaseDate.option("value")),
                             ExpiryDate: toLocalDateString(expiryDate.option("value")),
                             Quantity: quantity.option("value") || 1,
+                            UnitOfMeasure: unit.option("value"),
                             Value: value.option("value") || 0,
                             InsuranceFee: fee.option("value") || 0,
                             Supplier: supplier.option("value"),

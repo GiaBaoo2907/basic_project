@@ -8,6 +8,9 @@ namespace DeviceManagement.Models
         [Key]
         public int Id { get; set; }
 
+        [Required, StringLength(20)]
+        public string MaterialCode { get; set; }
+
         [Required, StringLength(250)]
         public string DeviceName { get; set; }
 
@@ -27,6 +30,9 @@ namespace DeviceManagement.Models
         public DateTime? ExpiryDate { get; set; }
 
         public int? Quantity { get; set; }
+
+        [StringLength(50)]
+        public string UnitOfMeasure { get; set; }
 
         public decimal Value { get; set; }
 
