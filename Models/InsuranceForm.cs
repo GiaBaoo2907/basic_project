@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace DeviceManagement.Models
 {
-    public class RequestForm
+    public class InsuranceForm
     {
         public int Id { get; set; }
         public string Code { get; set; }
@@ -29,15 +29,18 @@ namespace DeviceManagement.Models
         [Required]
         public DateTime? CreatedDate { get; set; }
 
-        public List<RequestAssetForm> Assets { get; set; } = new List<RequestAssetForm>();
+        public List<InsuranceAssetForm> Assets { get; set; } = new List<InsuranceAssetForm>();
     }
 
-    public class RequestAssetForm
+    public class InsuranceAssetForm
     {
         public int Id { get; set; }
 
         [Required, StringLength(250)]
         public string Equipment { get; set; }
+
+        [Required, StringLength(20)]
+        public string MaterialCode { get; set; }
 
         [StringLength(260)]
         public string DocumentName { get; set; }
@@ -58,6 +61,9 @@ namespace DeviceManagement.Models
 
         [Range(1, int.MaxValue)]
         public int Quantity { get; set; }
+
+        [StringLength(50)]
+        public string UnitOfMeasure { get; set; }
 
         [StringLength(200)]
         public string InsuranceType { get; set; }

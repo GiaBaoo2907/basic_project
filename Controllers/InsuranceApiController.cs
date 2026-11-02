@@ -1,16 +1,18 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Web.Http;
+using System.Data.Entity;
+using DeviceManagement.Data;
 using DeviceManagement.Models;
 using DeviceManagement.Services;
 
 namespace DeviceManagement.Controllers
 {
     [RoutePrefix("api/requestapi")]
-    public class RequestApiController : ApiController
+    public class InsuranceApiController : ApiController
     {
-        private readonly RequestService _service = new RequestService();
+        private readonly InsuranceService _service = new InsuranceService();
 
         [HttpGet, Route("")]
         public IHttpActionResult Get()
@@ -60,12 +62,15 @@ namespace DeviceManagement.Controllers
 
         // POST api/requestapi
         [HttpPost, Route("")]
-        public async Task<IHttpActionResult> Create([FromBody] RequestForm model)
+        public async Task<IHttpActionResult> Create([FromBody] InsuranceForm model)
         {
             string validationError;
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
             if (!ValidateForm(model, out validationError))
+                return BadRequest(validationError);
+            validationError = await ValidateMaterialNamesAsync(model);
+            if (validationError != null)
                 return BadRequest(validationError);
 
             try
@@ -81,7 +86,7 @@ namespace DeviceManagement.Controllers
 
         // PUT api/requestapi/5
         [HttpPut, Route("{id:int}")]
-        public async Task<IHttpActionResult> Update(int id, [FromBody] RequestForm model)
+        public async Task<IHttpActionResult> Update(int id, [FromBody] InsuranceForm model)
         {
             string validationError;
             if (!ModelState.IsValid)
@@ -91,6 +96,9 @@ namespace DeviceManagement.Controllers
                 return BadRequest("Id mismatch");
 
             if (!ValidateForm(model, out validationError))
+                return BadRequest(validationError);
+            validationError = await ValidateMaterialNamesAsync(model);
+            if (validationError != null)
                 return BadRequest(validationError);
 
             try
@@ -141,7 +149,7 @@ namespace DeviceManagement.Controllers
             base.Dispose(disposing);
         }
 
-        private static bool ValidateForm(RequestForm model, out string error)
+        private static bool ValidateForm(InsuranceForm model, out string error)
         {
             if (model == null || string.IsNullOrWhiteSpace(model.Title) ||
                 string.IsNullOrWhiteSpace(model.Creator) || string.IsNullOrWhiteSpace(model.DepartmentProject) ||
@@ -152,7 +160,7 @@ namespace DeviceManagement.Controllers
             }
 
             if (model.Assets == null)
-                model.Assets = new System.Collections.Generic.List<RequestAssetForm>();
+                model.Assets = new System.Collections.Generic.List<InsuranceAssetForm>();
 
             foreach (var asset in model.Assets)
             {
@@ -168,6 +176,54 @@ namespace DeviceManagement.Controllers
 
             error = null;
             return true;
+        }
+
+        private static async Task<string> ValidateMaterialNamesAsync(InsuranceForm model)
+        {
+            var materialCodes = model.Assets
+                .Where(asset => asset != null && !string.IsNullOrWhiteSpace(asset.MaterialCode))
+                .Select(asset => asset.MaterialCode.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (model.Assets.Count == 0) return null;
+
+            using (var db = new ApplicationDbContext())
+            {
+                if (!await db.DepartmentsProjects.AnyAsync(item => item.Name == model.DepartmentProject.Trim()))
+                    return "Bộ phận/dự án không có trong danh mục Quản trị.";
+                if (!string.IsNullOrWhiteSpace(model.Classification) &&
+                    !await db.Classifications.AnyAsync(item => item.ClassificationName == model.Classification.Trim()))
+                    return "Phân loại không có trong danh mục Quản trị.";
+                if (!string.IsNullOrWhiteSpace(model.InsuranceType) &&
+                    !await db.InsuranceTypes.AnyAsync(item => item.InsuranceTypeName == model.InsuranceType.Trim()))
+                    return "Loại bảo hiểm không có trong danh mục Quản trị.";
+
+                var materials = await db.Materials
+                    .Where(item => materialCodes.Contains(item.MaterialCode))
+                    .Select(item => new { item.MaterialCode, item.MaterialName, item.UnitOfMeasure })
+                    .ToListAsync();
+                foreach (var asset in model.Assets)
+                {
+                    if (!string.IsNullOrWhiteSpace(asset.Supplier) &&
+                        !await db.Suppliers.AnyAsync(item => item.SupplierName == asset.Supplier.Trim()))
+                        return "Nhà cung cấp không có trong danh mục Quản trị.";
+                    if (!string.IsNullOrWhiteSpace(asset.InsuranceType) &&
+                        !await db.InsuranceTypes.AnyAsync(item => item.InsuranceTypeName == asset.InsuranceType.Trim()))
+                        return "Loại bảo hiểm của vật tư không có trong danh mục Quản trị.";
+                    if (!string.IsNullOrWhiteSpace(asset.UnitOfMeasure) &&
+                        !await db.Units.AnyAsync(item => item.UnitName == asset.UnitOfMeasure.Trim()))
+                        return "Đơn vị tính không có trong danh mục Quản trị.";
+                    var material = materials.FirstOrDefault(item =>
+                        string.Equals(item.MaterialCode, asset.MaterialCode, StringComparison.OrdinalIgnoreCase));
+                    if (material == null)
+                        return "Mã vật tư '" + asset.MaterialCode + "' không có trong danh mục Quản trị.";
+                    asset.MaterialCode = material.MaterialCode;
+                    asset.Equipment = material.MaterialName;
+                    if (string.IsNullOrWhiteSpace(asset.UnitOfMeasure))
+                        asset.UnitOfMeasure = material.UnitOfMeasure;
+                }
+                return null;
+            }
         }
 
     }

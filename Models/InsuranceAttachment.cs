@@ -3,14 +3,14 @@ using System.ComponentModel.DataAnnotations;
 
 namespace DeviceManagement.Models
 {
-    public class RequestAttachment
+    public class InsuranceAttachment
     {
         [Key]
         public int Id { get; set; }
 
-        public int RequestId { get; set; }
+        public int InsuranceId { get; set; }
 
-        public int? RequestAssetId { get; set; }
+        public int? InsuranceAssetId { get; set; }
 
         [Required, MaxLength(260)]
         public string FileName { get; set; }

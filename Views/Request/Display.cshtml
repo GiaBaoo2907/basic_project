@@ -94,6 +94,7 @@ $(function () {
         columns: [
             { caption: "STT", width: 58, alignment: "center", cellTemplate: function (container, info) { container.text(info.rowIndex + 1); } },
             { dataField: "Equipment", caption: "Thiết bị", minWidth: 180 },
+            { dataField: "MaterialCode", caption: "Mã vật tư/thiết bị", width: 145 },
             { caption: "Tài liệu", width: 235, cellTemplate: function (container, info) {
                 var asset = info.data, $list = $("<div class='display-document-list'>"), docs = asset.DocumentFiles || [];
                 if (docs.length) docs.forEach(function (file) {
@@ -146,14 +147,14 @@ $(function () {
         $.getJSON(apiBase + "/" + requestId + "/attachments").done(function (files) {
             var assetFiles = {};
             files.forEach(function (file) {
-                if (file.RequestAssetId) {
-                    assetFiles[file.RequestAssetId] = assetFiles[file.RequestAssetId] || [];
-                    assetFiles[file.RequestAssetId].push(file);
+                if (file.InsuranceAssetId) {
+                    assetFiles[file.InsuranceAssetId] = assetFiles[file.InsuranceAssetId] || [];
+                    assetFiles[file.InsuranceAssetId].push(file);
                 }
             });
             assets.forEach(function (asset) { asset.DocumentFiles = assetFiles[asset.Id] || []; });
             displayGrid.option("dataSource", assets);
-            attachmentGrid.option("dataSource", files.filter(function (file) { return !file.RequestAssetId; }));
+            attachmentGrid.option("dataSource", files.filter(function (file) { return !file.InsuranceAssetId; }));
         }).fail(function () {
             attachmentGrid.option("noDataText", "Không tải được danh sách tệp đính kèm.");
         });

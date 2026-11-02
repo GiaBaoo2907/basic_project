@@ -13,19 +13,19 @@ using DeviceManagement.Models;
 namespace DeviceManagement.Controllers
 {
     [RoutePrefix("api/requestapi/{requestId:int}/attachments")]
-    public class RequestAttachmentApiController : ApiController
+    public class InsuranceAttachmentApiController : ApiController
     {
         [HttpGet, Route("")]
         public IHttpActionResult Get(int requestId)
         {
             using (var db = new ApplicationDbContext())
             {
-                if (!db.Requests.Any(x => x.Id == requestId && !x.IsDeleted))
+                if (!db.Insurances.Any(x => x.Id == requestId && !x.IsDeleted))
                     return NotFound();
 
-                var files = db.RequestAttachments.Where(x => x.RequestId == requestId)
+                var files = db.InsuranceAttachments.Where(x => x.InsuranceId == requestId)
                     .OrderBy(x => x.UploadedAt)
-                    .Select(x => new { x.Id, x.FileName, x.ContentType, x.UploadedAt, x.RequestAssetId })
+                    .Select(x => new { x.Id, x.FileName, x.ContentType, x.UploadedAt, x.InsuranceAssetId })
                     .ToList();
                 return Ok(files);
             }
@@ -39,7 +39,7 @@ namespace DeviceManagement.Controllers
 
             using (var db = new ApplicationDbContext())
             {
-                if (!db.Requests.Any(x => x.Id == requestId && !x.IsDeleted))
+                if (!db.Insurances.Any(x => x.Id == requestId && !x.IsDeleted))
                     return NotFound();
 
                 var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
@@ -53,7 +53,7 @@ namespace DeviceManagement.Controllers
                 {
                     int parsedAssetId;
                     if (!int.TryParse(await assetPart.ReadAsStringAsync(), out parsedAssetId) ||
-                        !db.RequestAssets.Any(x => x.Id == parsedAssetId && x.RequestId == requestId))
+                        !db.InsuranceAssets.Any(x => x.Id == parsedAssetId && x.InsuranceId == requestId))
                         return BadRequest("Invalid asset attachment.");
                     assetId = parsedAssetId;
                 }
@@ -72,16 +72,16 @@ namespace DeviceManagement.Controllers
                 using (var output = File.Create(fullPath))
                     await input.CopyToAsync(output);
 
-                var attachment = new RequestAttachment
+                var attachment = new InsuranceAttachment
                 {
-                    RequestId = requestId,
-                    RequestAssetId = assetId,
+                    InsuranceId = requestId,
+                    InsuranceAssetId = assetId,
                     FileName = fileName,
                     StoredFileName = storedFileName,
                     ContentType = filePart.Headers.ContentType == null ? "application/octet-stream" : filePart.Headers.ContentType.MediaType,
                     UploadedAt = DateTime.UtcNow
                 };
-                db.RequestAttachments.Add(attachment);
+                db.InsuranceAttachments.Add(attachment);
                 await db.SaveChangesAsync();
 
                 return Ok(new { attachment.Id, attachment.FileName, attachment.ContentType, attachment.UploadedAt });
@@ -93,8 +93,8 @@ namespace DeviceManagement.Controllers
         {
             using (var db = new ApplicationDbContext())
             {
-                if (!db.Requests.Any(x => x.Id == requestId && !x.IsDeleted)) return NotFound();
-                var attachment = db.RequestAttachments.FirstOrDefault(x => x.Id == attachmentId && x.RequestId == requestId);
+                if (!db.Insurances.Any(x => x.Id == requestId && !x.IsDeleted)) return NotFound();
+                var attachment = db.InsuranceAttachments.FirstOrDefault(x => x.Id == attachmentId && x.InsuranceId == requestId);
                 if (attachment == null)
                     return NotFound();
 
@@ -120,8 +120,8 @@ namespace DeviceManagement.Controllers
         {
             using (var db = new ApplicationDbContext())
             {
-                if (!db.Requests.Any(x => x.Id == requestId && !x.IsDeleted)) return NotFound();
-                var attachment = db.RequestAttachments.FirstOrDefault(x => x.Id == attachmentId && x.RequestId == requestId);
+                if (!db.Insurances.Any(x => x.Id == requestId && !x.IsDeleted)) return NotFound();
+                var attachment = db.InsuranceAttachments.FirstOrDefault(x => x.Id == attachmentId && x.InsuranceId == requestId);
                 if (attachment == null)
                     return NotFound();
 
@@ -147,13 +147,13 @@ namespace DeviceManagement.Controllers
         {
             using (var db = new ApplicationDbContext())
             {
-                if (!db.Requests.Any(x => x.Id == requestId && !x.IsDeleted)) return NotFound();
-                var attachment = await db.RequestAttachments.FirstOrDefaultAsync(x => x.Id == attachmentId && x.RequestId == requestId);
+                if (!db.Insurances.Any(x => x.Id == requestId && !x.IsDeleted)) return NotFound();
+                var attachment = await db.InsuranceAttachments.FirstOrDefaultAsync(x => x.Id == attachmentId && x.InsuranceId == requestId);
                 if (attachment == null)
                     return NotFound();
 
                 var path = Path.Combine(HttpContext.Current.Server.MapPath("~/App_Data/RequestFiles/" + requestId), attachment.StoredFileName);
-                db.RequestAttachments.Remove(attachment);
+                db.InsuranceAttachments.Remove(attachment);
                 await db.SaveChangesAsync();
                 if (File.Exists(path))
                     File.Delete(path);

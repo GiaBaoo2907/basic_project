@@ -4,13 +4,13 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DeviceManagement.Models
 {
-    public class Request
+    public class Insurance
     {
         [Key]
         public int Id { get; set; }
 
         [Required, MaxLength(50)]
-        [Index("IX_Requests_Code", IsUnique = true)]
+        [Index("IX_Insurances_Code", IsUnique = true)]
         public string Code { get; set; }
 
         [Required, MaxLength(500)]

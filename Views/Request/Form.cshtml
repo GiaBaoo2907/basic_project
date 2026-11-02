@@ -81,7 +81,15 @@
     var requestId = @requestId;
     var apiBase = "/api/requestapi";
     var deviceApiUrl = '@Url.Content("~/api/deviceapi")';
+    var catalogApiUrl = '@Url.Content("~/api/catalogapi")';
     var assetRows = [];
+    var departmentOptions = [];
+    var classificationOptions = [];
+    var materialOptions = [];
+    var unitOptions = [];
+    var insuranceTypeOptions = [];
+    var supplierOptions = [];
+    var catalogsLoaded = false;
     var assetGrid;
     var generalAttachmentsGrid;
     var devicePickerPopup;
@@ -109,6 +117,11 @@
     function csvNumber(value) { var text = String(value || "").trim().replace(/\s/g, ""); if (!text) return 0; if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(text)) text = text.replace(/\./g, "").replace(",", "."); else text = text.replace(",", "."); var n = Number(text); return isFinite(n) ? n : 0; }
     function fieldValue(name) { return formControls[name] ? formControls[name].option("value") : ""; }
     function setFieldValue(name, value) { if (formControls[name]) formControls[name].option("value", value || null); }
+    function materialByCode(code) { return materialOptions.find(function (item) { return String(item.Code) === String(code); }); }
+    function materialByName(name) {
+        var matches = materialOptions.filter(function (item) { return String(item.Name || "").trim().toLocaleLowerCase() === String(name || "").trim().toLocaleLowerCase(); });
+        return matches.length === 1 ? matches[0] : null;
+    }
     function fileType(name) { var match = String(name || "").match(/\.([^.]+)$/); return match ? match[1].toUpperCase() : "FILE"; }
     function refreshGeneralAttachments() {
         if (!generalAttachmentsGrid) return;
@@ -141,9 +154,9 @@
     function initializeFormControls() {
         formControls.Title = $("#Title").dxTextBox({ maxLength: 500, placeholder: "Nhập tiêu đề..." }).dxTextBox("instance");
         formControls.Creator = $("#Creator").dxSelectBox({ dataSource: ["Sharepoint Administrator - QA", "Nguyễn Văn A", "Trần Thị B"], placeholder: "Chọn người lập...", searchEnabled: true, showClearButton: true }).dxSelectBox("instance");
-        formControls.DepartmentProject = $("#DepartmentProject").dxSelectBox({ dataSource: ["Dự án 01", "Dự án 02", "Phòng Hành chính", "Kho vận", "Phòng kỹ thuật"], placeholder: "Chọn bộ phận/dự án...", searchEnabled: true, showClearButton: true, onValueChanged: refreshDevicePickerList }).dxSelectBox("instance");
-        formControls.Classification = $("#Classification").dxSelectBox({ dataSource: ["Mới", "Gia hạn", "Thiết bị", "Tài sản", "Phương tiện", "Vật tư"], placeholder: "Chọn phân loại...", searchEnabled: true, showClearButton: true, onValueChanged: refreshDevicePickerList }).dxSelectBox("instance");
-        formControls.InsuranceType = $("#InsuranceType").dxSelectBox({ dataSource: ["Bảo hiểm mọi rủi ro", "Bảo hiểm trách nhiệm bên thứ ba", "Bảo hiểm tài sản", "Bảo hiểm thiết bị", "Bảo hiểm phương tiện"], placeholder: "Chọn loại bảo hiểm...", searchEnabled: true, showClearButton: true, onValueChanged: refreshDevicePickerList }).dxSelectBox("instance");
+        formControls.DepartmentProject = $("#DepartmentProject").dxSelectBox({ dataSource: departmentOptions, placeholder: "Chọn bộ phận/dự án...", searchEnabled: true, showClearButton: true, onValueChanged: refreshDevicePickerList }).dxSelectBox("instance");
+        formControls.Classification = $("#Classification").dxSelectBox({ dataSource: classificationOptions, placeholder: "Chọn phân loại...", searchEnabled: true, showClearButton: true, onValueChanged: refreshDevicePickerList }).dxSelectBox("instance");
+        formControls.InsuranceType = $("#InsuranceType").dxSelectBox({ dataSource: insuranceTypeOptions, placeholder: "Chọn loại bảo hiểm...", searchEnabled: true, showClearButton: true, onValueChanged: refreshDevicePickerList }).dxSelectBox("instance");
         formControls.InsuranceExpiry = $("#InsuranceExpiry").dxDateBox({ type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true, showClearButton: true }).dxDateBox("instance");
         formControls.Code = $("#Code").dxTextBox({ readOnly: true, placeholder: "Tự động tạo khi lưu" }).dxTextBox("instance");
         formControls.CreatedDate = $("#CreatedDate").dxDateBox({ type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true }).dxDateBox("instance");
@@ -153,9 +166,10 @@
         asset = asset || {};
         assetRows.push({
             ClientId: "asset-" + Date.now() + "-" + Math.random().toString(36).slice(2),
-            Id: asset.Id || 0, Equipment: asset.Equipment || "", DocumentName: asset.DocumentName || "",
+            Id: asset.Id || 0, MaterialCode: asset.MaterialCode || (materialByName(asset.Equipment) || {}).Code || "", Equipment: asset.Equipment || "", DocumentName: asset.DocumentName || "",
             PurchaseDate: dateValue(asset.PurchaseDate), ExpiryDate: dateValue(asset.ExpiryDate),
             Value: Number(asset.Value) || 0, Premium: Number(asset.Premium) || 0, Quantity: Number(asset.Quantity) || 1,
+            UnitOfMeasure: asset.UnitOfMeasure || "",
             InsuranceType: asset.InsuranceType || "", ContractNumber: asset.ContractNumber || "", Supplier: asset.Supplier || "",
             existingAssetFiles: asset.existingAssetFiles || [], pendingAssetFiles: [], documentCellActive: false
         });
@@ -196,10 +210,12 @@
                             var device = devicePickerSelect.option("selectedItem");
                             if (!device) return;
                             addAsset({
+                                MaterialCode: device.MaterialCode,
                                 Equipment: device.DeviceName,
                                 PurchaseDate: device.PurchaseDate,
                                 ExpiryDate: device.ExpiryDate,
                                 Quantity: device.Quantity,
+                                UnitOfMeasure: device.UnitOfMeasure,
                                 Value: device.Value,
                                 Premium: device.InsuranceFee,
                                 InsuranceType: device.InsuranceType,
@@ -279,16 +295,61 @@
             editing: { mode: "cell", allowUpdating: true, allowAdding: false, allowDeleting: false },
             columns: [
                 { caption: "STT", width: 58, alignment: "center", allowEditing: false, cellTemplate: function (container, info) { container.text(info.rowIndex + 1); } },
-                { dataField: "Equipment", caption: "Thiết bị", minWidth: 180 },
+                {
+                    dataField: "Equipment", caption: "Vật tư/Thiết bị", minWidth: 180,
+                    editCellTemplate: function (container, options) {
+                        $("<div>").dxSelectBox({
+                            dataSource: materialOptions,
+                            valueExpr: "Code",
+                            displayExpr: function (item) { return item ? item.Name + " — " + item.Code : ""; },
+                            value: options.data.MaterialCode || (materialByName(options.value) || {}).Code || null,
+                            searchEnabled: true,
+                            acceptCustomValue: false,
+                            showClearButton: true,
+                            onValueChanged: function (e) {
+                                var material = e.component.option("selectedItem");
+                                options.data.MaterialCode = material ? material.Code : null;
+                                if (material) options.data.UnitOfMeasure = material.UnitOfMeasure || options.data.UnitOfMeasure;
+                                options.setValue(material ? material.Name : null);
+                            }
+                        }).appendTo(container);
+                    }
+                },
+                { dataField: "MaterialCode", caption: "Mã vật tư/thiết bị", width: 145, allowEditing: false },
                 { caption: "Tài liệu", width: 235, allowEditing: false, cellTemplate: renderDocumentCell },
                 { dataField: "PurchaseDate", caption: "Ngày mua BH", dataType: "date", format: "dd/MM/yy", editorOptions: { displayFormat: "dd/MM/yy" }, width: 130 },
                 { dataField: "ExpiryDate", caption: "Ngày đến hạn", dataType: "date", format: "dd/MM/yy", editorOptions: { displayFormat: "dd/MM/yy" }, width: 125 },
                 { dataField: "Value", caption: "Giá trị", dataType: "number", format: "#,##0.##", alignment: "right", width: 125 },
                 { dataField: "Premium", caption: "Phí bảo hiểm", dataType: "number", format: "#,##0.##", alignment: "right", width: 125 },
                 { dataField: "Quantity", caption: "Số lượng", dataType: "number", alignment: "center", width: 100 },
-                { dataField: "InsuranceType", caption: "Loại bảo hiểm", minWidth: 180 },
+                { dataField: "UnitOfMeasure", caption: "Đơn vị tính", width: 120, editCellTemplate: function (container, options) {
+                    $("<div>").dxSelectBox({
+                        dataSource: unitOptions,
+                        value: options.value,
+                        searchEnabled: true,
+                        showClearButton: true,
+                        onValueChanged: function (e) { options.setValue(e.value); }
+                    }).appendTo(container);
+                } },
+                { dataField: "InsuranceType", caption: "Loại bảo hiểm", minWidth: 180, editCellTemplate: function (container, options) {
+                    $("<div>").dxSelectBox({
+                        dataSource: insuranceTypeOptions,
+                        value: options.value,
+                        searchEnabled: true,
+                        showClearButton: true,
+                        onValueChanged: function (e) { options.setValue(e.value); }
+                    }).appendTo(container);
+                } },
                 { dataField: "ContractNumber", caption: "Số hợp đồng", minWidth: 160 },
-                { dataField: "Supplier", caption: "Nhà cung cấp", minWidth: 160 },
+                { dataField: "Supplier", caption: "Nhà cung cấp", minWidth: 160, editCellTemplate: function (container, options) {
+                    $("<div>").dxSelectBox({
+                        dataSource: supplierOptions,
+                        value: options.value,
+                        searchEnabled: true,
+                        showClearButton: true,
+                        onValueChanged: function (e) { options.setValue(e.value); }
+                    }).appendTo(container);
+                } },
                 { caption: "Thao tác", width: 78, alignment: "center", allowEditing: false, cellTemplate: function (container, info) { $("<div>").dxButton({ icon: "trash", type: "danger", stylingMode: "text", hint: "Xóa vật tư", onClick: function () { var index = assetRows.findIndex(function (item) { return item.ClientId === info.data.ClientId; }); if (index >= 0) assetRows.splice(index, 1); refreshAssetGrid(); } }).appendTo(container); } }
             ]
         });
@@ -300,8 +361,8 @@
             assetRows.forEach(function (asset) { asset.existingAssetFiles = []; });
             savedGeneralAttachments = [];
             files.forEach(function (file) {
-                if (file.RequestAssetId) {
-                    var asset = assetRows.find(function (item) { return item.Id === file.RequestAssetId; });
+                if (file.InsuranceAssetId) {
+                    var asset = assetRows.find(function (item) { return item.Id === file.InsuranceAssetId; });
                     if (asset) asset.existingAssetFiles.push(file);
                 } else {
                     savedGeneralAttachments.push(file);
@@ -331,15 +392,19 @@
     function collect() {
         var assets = [];
         var valid = true;
+        var validMaterials = true;
         assetRows.forEach(function (row) {
             var a = {
                 Id: Number(row.Id) || 0,
-                Equipment: row.Equipment, DocumentName: (row.existingAssetFiles || []).map(function (f) { return f.FileName; }).join("; ") || row.DocumentName || "",
+                Equipment: row.Equipment, MaterialCode: row.MaterialCode, DocumentName: (row.existingAssetFiles || []).map(function (f) { return f.FileName; }).join("; ") || row.DocumentName || "",
                 PurchaseDate: dateValue(row.PurchaseDate), ExpiryDate: dateValue(row.ExpiryDate) || null,
                 Value: Number(row.Value) || 0, Premium: Number(row.Premium) || 0,
-                Quantity: Number(row.Quantity) || 0, InsuranceType: row.InsuranceType,
+                Quantity: Number(row.Quantity) || 0, UnitOfMeasure: row.UnitOfMeasure,
+                InsuranceType: row.InsuranceType,
                 ContractNumber: row.ContractNumber, Supplier: row.Supplier
             };
+            var material = materialByCode(a.MaterialCode);
+            if (!material || String(material.Name).trim().toLocaleLowerCase() !== String(a.Equipment || "").trim().toLocaleLowerCase()) validMaterials = false;
             if (!a.Equipment || !a.PurchaseDate || !a.ContractNumber || a.Quantity < 1) valid = false;
             if (a.ExpiryDate && a.PurchaseDate && a.ExpiryDate < a.PurchaseDate) {
                 throw new Error(
@@ -351,6 +416,7 @@
         });
         var model = { Id: requestId, Title: fieldValue("Title"), Creator: fieldValue("Creator"), DepartmentProject: fieldValue("DepartmentProject"), Classification: fieldValue("Classification"), InsuranceType: fieldValue("InsuranceType"), InsuranceExpiry: dateValue(fieldValue("InsuranceExpiry")) || null, CreatedDate: dateValue(fieldValue("CreatedDate")), Assets: assets };
         if (!model.Title || !model.Creator || !model.DepartmentProject || !model.CreatedDate) throw new Error("Vui lòng nhập đủ thông tin bắt buộc của phiếu.");
+        if (!validMaterials) throw new Error("Tên thiết bị/vật tư phải được chọn từ danh mục vật tư. Hãy cập nhật danh mục rồi chọn lại.");
         if (!valid) throw new Error("Thiết bị trong phiếu chưa có đủ dữ liệu từ danh mục. Vui lòng chọn lại thiết bị hoặc bổ sung ngày mua, số hợp đồng và số lượng trong danh mục thiết bị.");
         return model;
     }
@@ -374,16 +440,37 @@
                 if (!jobs.length) window.location.href = "/Home/Index";
             }).fail(function (xhr) { error(xhr.responseJSON && xhr.responseJSON.Message ? xhr.responseJSON.Message : xhr.responseText || "Không lưu được phiếu."); });
     }
-    initializeFormControls();
-    initializeAssetGrid();
-    initializeGeneralAttachmentsGrid();
-    $("#addAsset").dxButton({ text: "Thêm thiết bị", icon: "plus", type: "default", stylingMode: "outlined", onClick: openDevicePicker });
-    $("#exportAssets").dxButton({ text: "Export CSV", icon: "export", type: "default", stylingMode: "contained", onClick: exportAssets });
-    $("#importAssetsButton").dxButton({ text: "Import CSV", icon: "upload", type: "default", stylingMode: "contained", onClick: function () { $("#importAssetsFile").trigger("click"); } });
-    $("#saveRequest").dxButton({ text: "Lưu", icon: "save", type: "default", stylingMode: "contained", onClick: save });
+    $.when(
+        $.getJSON(catalogApiUrl + "/projects"),
+        $.getJSON(catalogApiUrl + "/classifications"),
+        $.getJSON(catalogApiUrl + "/materials"),
+        $.getJSON(catalogApiUrl + "/units"),
+        $.getJSON(catalogApiUrl + "/insurance-types"),
+        $.getJSON(catalogApiUrl + "/suppliers")
+    ).done(function (projects, classifications, materials, units, insuranceTypes, suppliers) {
+        departmentOptions = projects[0].map(function (item) { return item.Name; });
+        classificationOptions = classifications[0].map(function (item) { return item.Name; });
+        materialOptions = materials[0] || [];
+        unitOptions = units[0].map(function (item) { return item.Name; });
+        insuranceTypeOptions = insuranceTypes[0].map(function (item) { return item.Name; });
+        supplierOptions = suppliers[0].map(function (item) { return item.Name; });
+        catalogsLoaded = true;
+
+        initializeFormControls();
+        initializeAssetGrid();
+        initializeGeneralAttachmentsGrid();
+        $("#addAsset").dxButton({ text: "Thêm thiết bị", icon: "plus", type: "default", stylingMode: "outlined", onClick: openDevicePicker });
+        $("#exportAssets").dxButton({ text: "Export CSV", icon: "export", type: "default", stylingMode: "contained", onClick: exportAssets });
+        $("#importAssetsButton").dxButton({ text: "Import CSV", icon: "upload", type: "default", stylingMode: "contained", onClick: function () { $("#importAssetsFile").trigger("click"); } });
+        $("#saveRequest").dxButton({ text: "Lưu", icon: "save", type: "default", stylingMode: "contained", onClick: save });
+        if (isEdit) loadRequest(); else setFieldValue("CreatedDate", localDateString(new Date()));
+    }).fail(function (xhr) {
+        error(xhr.responseJSON && (xhr.responseJSON.Message || xhr.responseJSON.message) || "Không tải được danh mục bộ phận/dự án, phân loại, vật tư, đơn vị tính, loại bảo hiểm hoặc nhà cung cấp.");
+    });
+
     function exportAssets() {
-        var rows = [["Thiết bị", "Tài liệu", "Ngày mua BH", "Ngày đến hạn", "Giá trị", "Phí bảo hiểm", "Số lượng", "Loại bảo hiểm", "Số hợp đồng", "Nhà cung cấp"]];
-        assetRows.forEach(function (asset) { rows.push([asset.Equipment, (asset.existingAssetFiles||[]).map(function(f){return f.FileName;}).join("; ") || asset.DocumentName || "", csvDate(asset.PurchaseDate), csvDate(asset.ExpiryDate), asset.Value, asset.Premium, asset.Quantity, asset.InsuranceType, asset.ContractNumber, asset.Supplier]); });
+        var rows = [["Thiết bị", "Tài liệu", "Ngày mua BH", "Ngày đến hạn", "Giá trị", "Phí bảo hiểm", "Số lượng", "Đơn vị tính", "Loại bảo hiểm", "Số hợp đồng", "Nhà cung cấp"]];
+        assetRows.forEach(function (asset) { rows.push([asset.Equipment, (asset.existingAssetFiles||[]).map(function(f){return f.FileName;}).join("; ") || asset.DocumentName || "", csvDate(asset.PurchaseDate), csvDate(asset.ExpiryDate), asset.Value, asset.Premium, asset.Quantity, asset.UnitOfMeasure, asset.InsuranceType, asset.ContractNumber, asset.Supplier]); });
         var csv = rows.map(function (r) { return r.map(function (v) { return '"' + String(v || "").replace(/"/g, '""') + '"'; }).join(","); }).join("\r\n");
         var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\uFEFF" + csv], {type:"text/csv;charset=utf-8"})); a.download = "danh-sach-vat-tu.csv"; a.click(); URL.revokeObjectURL(a.href);
     }
@@ -410,23 +497,23 @@
                 ["equipment", ["thiết bị", "tên thiết bị", "vật tư"]], ["document", ["tài liệu", "tài liệu đính kèm", "tên tài liệu"]],
                 ["purchase", ["ngày mua bh", "ngày mua bảo hiểm", "ngày mua"]], ["expiry", ["ngày đến hạn", "ngày hết hạn"]],
                 ["value", ["giá trị"]], ["premium", ["phí bảo hiểm"]], ["quantity", ["số lượng"]],
+                ["unit", ["đơn vị tính", "đơn vị"]],
                 ["insurance", ["loại bảo hiểm"]], ["contract", ["số hợp đồng", "số hợp đồng bảo hiểm"]], ["supplier", ["nhà cung cấp"]]
             ];
             var indexes = {};
             columns.forEach(function (column) { var names = column[1].map(normalizeHeader); indexes[column[0]] = header.findIndex(function (h) { return names.indexOf(h) >= 0; }); });
-            if (columns.some(function (column) { return indexes[column[0]] < 0; })) { error("Tiêu đề CSV chưa đủ 10 cột theo mẫu. Nhà cung cấp phải là cột cuối cùng."); return; }
+            if (columns.some(function (column) { return column[0] !== "unit" && indexes[column[0]] < 0; })) { error("Tiêu đề CSV chưa đủ các cột bắt buộc theo mẫu."); return; }
             function get(c, name) { return c[indexes[name]] || ""; }
             assetRows = [];
             refreshAssetGrid();
             rows.slice(1).forEach(function (c) {
                 if (!c.some(function (v) { return v.trim() !== ""; })) return;
-                addAsset({ Equipment:get(c,"equipment"), PurchaseDate:parseCsvDate(get(c,"purchase")), ExpiryDate:parseCsvDate(get(c,"expiry")), Value:csvNumber(get(c,"value")), Premium:csvNumber(get(c,"premium")), Quantity:csvNumber(get(c,"quantity")) || 1, InsuranceType:get(c,"insurance"), ContractNumber:get(c,"contract"), Supplier:get(c,"supplier"), DocumentName:get(c,"document") });
+                addAsset({ Equipment:get(c,"equipment"), PurchaseDate:parseCsvDate(get(c,"purchase")), ExpiryDate:parseCsvDate(get(c,"expiry")), Value:csvNumber(get(c,"value")), Premium:csvNumber(get(c,"premium")), Quantity:csvNumber(get(c,"quantity")) || 1, UnitOfMeasure:get(c,"unit"), InsuranceType:get(c,"insurance"), ContractNumber:get(c,"contract"), Supplier:get(c,"supplier"), DocumentName:get(c,"document") });
             });
         };
         reader.readAsArrayBuffer(this.files[0]);
         this.value = "";
     });
-    if (isEdit) loadRequest(); else setFieldValue("CreatedDate", localDateString(new Date()));
 })(jQuery);
 </script>
 }
