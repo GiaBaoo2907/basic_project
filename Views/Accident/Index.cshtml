@@ -1,0 +1,131 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Quản lý tai nạn/sự cố";
+}
+<style>
+    .accident-page { width: 100%; min-width: 0; }
+    .accident-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .accident-toolbar-add { flex: 0 0 auto; }
+    .accident-toolbar-search { flex: 1 1 280px; min-width: 220px; }
+    .accident-toolbar-filter { flex: 0 1 230px; min-width: 180px; }
+    .accident-grid-frame { width: 100%; padding: 8px; overflow: hidden; background: #fff; border: 1px solid #d9dee5; border-radius: 4px; }
+    #accident-grid { width: 100%; color: #212529; font-family: inherit; font-size: 14px; }
+    #accident-grid .dx-datagrid-headers, #accident-grid .dx-header-row > td { color: #212529; font-weight: 600; background: #f3f5f7; }
+    #accident-grid .dx-data-row > td { vertical-align: middle; padding-top: 10px; padding-bottom: 10px; }
+    #accident-grid .accident-description { white-space: normal; line-height: 1.45; }
+    #accident-grid .dx-command-select { width: 42px; min-width: 42px; }
+    #accident-grid .dx-icon { color: #337ab7; }
+    .accident-action-button { display: inline-block; width: 30px; min-width: 30px; margin: 0; }
+    #accident-grid .accident-actions-column { width: 88px !important; min-width: 88px !important; max-width: 88px !important; }
+    .accident-error { margin-bottom: 10px; white-space: pre-wrap; }
+    @@media (max-width: 900px) {
+        .accident-toolbar-search, .accident-toolbar-filter { flex: 1 1 100%; }
+        .accident-grid-frame { padding: 4px; }
+        #accident-grid { font-size: 13px; }
+        #accident-grid .dx-data-row > td { padding: 7px 5px; }
+    }
+</style>
+<div class="accident-page">
+    <div class="accident-toolbar">
+        <div id="accident-add" class="accident-toolbar-add"></div>
+        <div id="accident-search" class="accident-toolbar-search"></div>
+        <div id="accident-cause-filter" class="accident-toolbar-filter"></div>
+        <div id="accident-type-filter" class="accident-toolbar-filter"></div>
+    </div>
+    <div id="accident-error" class="alert alert-danger accident-error" style="display:none"></div>
+    <div class="accident-grid-frame"><div id="accident-grid"></div></div>
+</div>
+@section scripts {
+<script>
+    $(function () {
+        var accidentUrl = '@Url.Content("~/api/accidentapi")';
+        var catalogUrl = '@Url.Content("~/api/catalogapi/")';
+        var createUrl = '@Url.Action("Create", "Accident")';
+        var editUrlTemplate = '@Url.Action("Edit", "Accident", new { id = "__id__" })';
+        var deleteUrlTemplate = '@Url.Action("Delete", "Accident", new { id = "__id__" })';
+        var allAccidents = [];
+        var searchText = '';
+        var selectedCause = null;
+        var selectedType = null;
+
+        function normalizeText(value) {
+            return String(value || '').toLocaleLowerCase().replace(/[đĐ]/g, 'd')
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        }
+        function showError(message) { $('#accident-error').text(message || 'Không thể hoàn tất thao tác.').show(); }
+        function errorText(xhr) {
+            var body = xhr && xhr.responseJSON;
+            return body && (body.Message || body.message) || 'Lỗi kết nối API.';
+        }
+        function filteredRows() {
+            var keyword = normalizeText(searchText.trim());
+            return allAccidents.filter(function (row) {
+                var matchCause = !selectedCause || row.AccidentCause === selectedCause;
+                var matchType = !selectedType || row.AccidentType === selectedType;
+                var text = normalizeText([row.AccidentCode, row.MaterialCode, row.MaterialName, row.Classification,
+                    row.Department, row.Value, row.LossDescription, row.AccidentCause, row.AccidentType].join(' '));
+                return matchCause && matchType && (!keyword || text.indexOf(keyword) >= 0);
+            });
+        }
+        function refreshGrid(grid) { grid.option('dataSource', filteredRows()); grid.pageIndex(0); }
+
+        $('#accident-add').dxButton({ text: 'Thêm phiếu', icon: 'plus', type: 'default', stylingMode: 'contained', onClick: function () { window.location.href = createUrl; } });
+
+        $.when(
+            $.getJSON(accidentUrl),
+            $.getJSON(catalogUrl + 'accidents-cause'),
+            $.getJSON(catalogUrl + 'accidents-types')
+        ).done(function (accidentResult, causeResult, typeResult) {
+            allAccidents = accidentResult[0] || [];
+            var causes = causeResult[0] || [];
+            var types = typeResult[0] || [];
+            var grid = $('#accident-grid').dxDataGrid({
+                dataSource: allAccidents,
+                keyExpr: 'Id',
+                showBorders: true,
+                showColumnLines: true,
+                showRowLines: true,
+                rowAlternationEnabled: true,
+                hoverStateEnabled: true,
+                columnAutoWidth: true,
+                allowColumnResizing: false,
+                columnHidingEnabled: true,
+                wordWrapEnabled: true,
+                selection: { mode: 'multiple', showCheckBoxesMode: 'always', allowSelectAll: true },
+                scrolling: { mode: 'standard', showScrollbar: 'never', useNative: true },
+                paging: { pageSize: 10 },
+                pager: { visible: true, showPageSizeSelector: true, allowedPageSizes: [10, 20, 50], showInfo: true },
+                noDataText: 'Chưa có dữ liệu tai nạn/sự cố.',
+                columns: [
+                    { caption: 'STT', width: 54, alignment: 'center', allowSorting: false,
+                        cellTemplate: function (container, options) { container.text(options.component.pageIndex() * options.component.pageSize() + options.rowIndex + 1); } },
+                    { dataField: 'MaterialCode', caption: 'Mã vật tư', width: 100, alignment: 'center' },
+                    { dataField: 'MaterialName', caption: 'Tên vật tư', width: 150 },
+                    { dataField: 'Classification', caption: 'Phân loại', width: 125, alignment: 'center' },
+                    { dataField: 'Department', caption: 'Bộ phận', width: 110, alignment: 'center' },
+                    { dataField: 'Value', caption: 'Giá trị', dataType: 'number', format: '#,##0', width: 110, alignment: 'right' },
+                    { dataField: 'LossDescription', caption: 'Mô tả tai nạn/tổn thất thực tế', width: 250,
+                        cellTemplate: function (container, options) { $('<div class="accident-description">').text(options.value || '').appendTo(container); } },
+                    { caption: 'Thao tác', width: 88, minWidth: 88, cssClass: 'accident-actions-column', alignment: 'center', allowSorting: false,
+                        cellTemplate: function (container, options) {
+                            var id = encodeURIComponent(options.data.Id);
+                            $('<div>').dxButton({ icon: 'edit', stylingMode: 'text', hint: 'Sửa', onClick: function () {
+                                window.location.href = editUrlTemplate.replace('__id__', id);
+                            }}).addClass('accident-action-button').appendTo(container);
+                            $('<div>').dxButton({ icon: 'trash', type: 'danger', stylingMode: 'text', hint: 'Xóa', onClick: function () {
+                                window.location.href = deleteUrlTemplate.replace('__id__', id);
+                            }}).addClass('accident-action-button').appendTo(container);
+                        } }
+                ]
+            }).dxDataGrid('instance');
+
+            $('#accident-search').dxTextBox({ placeholder: 'Tìm mã vật tư, tên vật tư, nội dung...', mode: 'search', valueChangeEvent: 'input',
+                onValueChanged: function (e) { searchText = e.value || ''; refreshGrid(grid); } });
+            $('#accident-cause-filter').dxSelectBox({ dataSource: causes, valueExpr: 'Name', displayExpr: 'Name', placeholder: 'Lọc theo nguyên nhân', showClearButton: true, searchEnabled: true,
+                onValueChanged: function (e) { selectedCause = e.value || null; refreshGrid(grid); } });
+            $('#accident-type-filter').dxSelectBox({ dataSource: types, valueExpr: 'Name', displayExpr: 'Name', placeholder: 'Lọc theo loại tai nạn/sự cố', showClearButton: true, searchEnabled: true,
+                onValueChanged: function (e) { selectedType = e.value || null; refreshGrid(grid); } });
+        }).fail(function (xhr) { showError(errorText(xhr) + ' (Kiểm tra API phiếu và danh mục tai nạn.)'); });
+    });
+</script>
+}

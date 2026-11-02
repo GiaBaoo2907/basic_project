@@ -1,0 +1,73 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Xóa phiếu tai nạn/sự cố";
+    var accidentId = (int)ViewBag.AccidentId;
+}
+<style>
+    .accident-delete-page { max-width: 900px; margin: 0 auto; }
+    .accident-delete-card { padding: 22px; background: #fff; border: 1px solid #d9dfe6; border-radius: 5px; }
+    .accident-delete-heading { margin: 0 0 14px; color: #a1262f; font-size: 22px; font-weight: 700; }
+    .accident-delete-info { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+    .accident-delete-field { padding: 10px 12px; background: #f6f7f9; border: 1px solid #e2e5e9; border-radius: 4px; }
+    .accident-delete-label { display: block; margin-bottom: 4px; color: #66717c; font-size: 12px; }
+    .accident-delete-value { color: #263238; overflow-wrap: anywhere; }
+    .accident-delete-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    @@media (max-width: 640px) { .accident-delete-info { grid-template-columns: 1fr; } }
+</style>
+<div class="accident-delete-page">
+    <div id="delete-error" class="alert alert-danger" style="display:none"></div>
+    <section class="accident-delete-card">
+        <h1 class="accident-delete-heading">Xác nhận xóa phiếu</h1>
+        <p id="delete-message">Đang tải thông tin phiếu...</p>
+        <div id="delete-info" class="accident-delete-info" style="display:none">
+            <div class="accident-delete-field"><span class="accident-delete-label">Mã phiếu</span><span id="delete-code" class="accident-delete-value"></span></div>
+            <div class="accident-delete-field"><span class="accident-delete-label">Vật tư</span><span id="delete-material" class="accident-delete-value"></span></div>
+            <div class="accident-delete-field"><span class="accident-delete-label">Nguyên nhân</span><span id="delete-cause" class="accident-delete-value"></span></div>
+            <div class="accident-delete-field"><span class="accident-delete-label">Loại tai nạn/sự cố</span><span id="delete-type" class="accident-delete-value"></span></div>
+            <div class="accident-delete-field"><span class="accident-delete-label">Bộ phận/Dự án</span><span id="delete-department" class="accident-delete-value"></span></div>
+            <div class="accident-delete-field"><span class="accident-delete-label">Giá trị</span><span id="delete-value" class="accident-delete-value"></span></div>
+            <div class="accident-delete-field" style="grid-column:1/-1"><span class="accident-delete-label">Mô tả tai nạn/tổn thất</span><span id="delete-description" class="accident-delete-value"></span></div>
+        </div>
+        <div class="alert alert-warning">Phiếu sẽ bị ẩn khỏi danh sách nhưng dữ liệu vẫn được giữ trong cơ sở dữ liệu.</div>
+        <div class="accident-delete-actions">
+            <div id="delete-cancel"></div>
+            <div id="delete-confirm"></div>
+        </div>
+    </section>
+</div>
+@section scripts {
+<script>
+    $(function () {
+        var id = @accidentId;
+        var apiUrl = '@Url.Content("~/api/accidentapi")';
+        var listUrl = '@Url.Action("Index", "Accident")';
+        var confirmButton;
+        function fail(xhr) {
+            var body = xhr && xhr.responseJSON;
+            $('#delete-error').text(body && (body.Message || body.message) || 'Không thể hoàn tất thao tác.').show();
+        }
+        $('#delete-cancel').dxButton({ text: 'Hủy', icon: 'close', stylingMode: 'outlined', onClick: function () { window.location.href = listUrl; } });
+        confirmButton = $('#delete-confirm').dxButton({ text: 'Xóa phiếu', icon: 'trash', type: 'danger', stylingMode: 'contained', disabled: true, onClick: function () {
+            confirmButton.dxButton('instance').option('disabled', true);
+            $.ajax({ url: apiUrl + '/' + encodeURIComponent(id), method: 'DELETE' })
+                .done(function () { window.location.href = listUrl; })
+                .fail(function (xhr) { fail(xhr); confirmButton.dxButton('instance').option('disabled', false); });
+        }});
+        $.getJSON(apiUrl + '/' + encodeURIComponent(id)).done(function (row) {
+            $('#delete-message').text('Bạn đang chuẩn bị xóa phiếu tai nạn/sự cố sau:');
+            $('#delete-info').show();
+            $('#delete-code').text(row.AccidentCode || '');
+            $('#delete-material').text((row.MaterialCode || '') + ' — ' + (row.MaterialName || ''));
+            $('#delete-cause').text(row.AccidentCause || 'Chưa xác định');
+            $('#delete-type').text(row.AccidentType || 'Chưa xác định');
+            $('#delete-department').text(row.Department || '');
+            $('#delete-value').text(Number(row.Value || 0).toLocaleString('vi-VN') + ' VNĐ');
+            $('#delete-description').text(row.LossDescription || '');
+            confirmButton.dxButton('instance').option('disabled', false);
+        }).fail(function (xhr) {
+            $('#delete-message').text('Không tìm thấy phiếu hoặc phiếu đã được xóa.');
+            fail(xhr);
+        });
+    });
+</script>
+}

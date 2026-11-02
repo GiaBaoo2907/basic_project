@@ -1,0 +1,119 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var isEdit = ViewBag.IsEdit != null && (bool)ViewBag.IsEdit;
+    var accidentId = ViewBag.AccidentId == null ? 0 : (int)ViewBag.AccidentId;
+    ViewBag.Title = isEdit ? "Sửa phiếu tai nạn/sự cố" : "Thêm phiếu tai nạn/sự cố";
+}
+<style>
+    .accident-form-page { width: 100%; max-width: 1050px; margin: 0 auto; }
+    .accident-form-heading { margin-bottom: 26px; padding: 16px 20px; color: #35414c; background: #edf1f5; border: 1px solid #d9dfe6; border-left: 4px solid #337ab7; border-radius: 5px; }
+    .accident-form-heading h1 { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.35; }
+    .accident-form-card { padding: 24px; background: #fff; border: 1px solid #d9dfe6; border-radius: 5px; }
+    #accident-form .dx-field-item { padding-bottom: 20px; }
+    #accident-form .dx-field-item-label { padding-bottom: 7px; }
+    #accident-form .dx-field-item-label-text { line-height: 1.4; }
+    .accident-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    #accident-form-error { white-space: pre-wrap; }
+    @@media (max-width: 700px) {
+        .accident-form-heading { margin-bottom: 18px; padding: 13px 15px; }
+        .accident-form-card { padding: 15px; }
+        #accident-form .dx-field-item { padding-bottom: 14px; }
+    }
+</style>
+<div class="accident-form-page">
+    <header class="accident-form-heading"><h1>@ViewBag.Title</h1></header>
+    <div id="accident-form-error" class="alert alert-danger" style="display:none"></div>
+    <div class="accident-form-card">
+        <div id="accident-form"></div>
+        <div class="accident-form-actions">
+            <div id="accident-cancel"></div>
+            <div id="accident-save"></div>
+        </div>
+    </div>
+</div>
+@section scripts {
+<script>
+    $(function () {
+        var isEdit = @isEdit.ToString().ToLowerInvariant();
+        var id = @accidentId;
+        var apiUrl = '@Url.Content("~/api/accidentapi")';
+        var catalogUrl = '@Url.Content("~/api/catalogapi/")';
+        var listUrl = '@Url.Action("Index", "Accident")';
+        var form;
+
+        function showError(text) { $('#accident-form-error').text(text || 'Không thể lưu phiếu.').show(); }
+        function getError(xhr) {
+            var body = xhr && xhr.responseJSON;
+            return body && (body.Message || body.message) || 'Không thể kết nối API. Kiểm tra dữ liệu và thử lại.';
+        }
+        function toLocalDateTime(date) {
+            var pad = function (n) { return String(n).padStart(2, '0'); };
+            return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + 'T00:00:00';
+        }
+
+        $('#accident-cancel').dxButton({ text: 'Thoát', icon: 'close', stylingMode: 'outlined', onClick: function () { window.location.href = listUrl; } });
+        var saveButton = $('#accident-save').dxButton({ text: 'Lưu', icon: 'save', type: 'default', stylingMode: 'contained', onClick: save });
+
+        $.when(
+            $.getJSON(catalogUrl + 'materials'),
+            $.getJSON(catalogUrl + 'projects'),
+            $.getJSON(catalogUrl + 'accidents-cause'),
+            $.getJSON(catalogUrl + 'accidents-types')
+        ).done(function (materialResult, projectResult, causeResult, typeResult) {
+            var materials = materialResult[0] || [];
+            var projects = projectResult[0] || [];
+            var causes = causeResult[0] || [];
+            var types = typeResult[0] || [];
+            var initial = { Value: 0, AccidentDate: new Date() };
+
+            form = $('#accident-form').dxForm({
+                formData: initial,
+                colCount: 2,
+                labelLocation: 'top',
+                showColonAfterLabel: false,
+                items: [
+                    { dataField: 'MaterialCode', label: { text: 'Vật tư' }, isRequired: true, editorType: 'dxSelectBox', editorOptions: { dataSource: materials, valueExpr: 'Code', displayExpr: function (item) { return item ? item.Code + ' — ' + item.Name : ''; }, searchEnabled: true, showClearButton: true, placeholder: 'Chọn vật tư' }, validationRules: [{ type: 'required', message: 'Vui lòng chọn vật tư.' }] },
+                    { dataField: 'Department', label: { text: 'Bộ phận/Dự án' }, isRequired: true, editorType: 'dxSelectBox', editorOptions: { dataSource: projects, valueExpr: 'Name', displayExpr: 'Name', searchEnabled: true, showClearButton: true, placeholder: 'Chọn bộ phận/dự án' }, validationRules: [{ type: 'required', message: 'Vui lòng chọn bộ phận/dự án.' }] },
+                    { dataField: 'Value', label: { text: 'Giá trị tổn thất (VNĐ)' }, isRequired: true, editorType: 'dxNumberBox', editorOptions: { min: 0, format: '#,##0', showSpinButtons: true }, validationRules: [{ type: 'required' }, { type: 'numeric', min: 0, message: 'Giá trị không được âm.' }] },
+                    { dataField: 'AccidentDate', label: { text: 'Ngày xảy ra' }, isRequired: true, editorType: 'dxDateBox', editorOptions: { type: 'date', displayFormat: 'dd/MM/yyyy', useMaskBehavior: true }, validationRules: [{ type: 'required', message: 'Vui lòng chọn ngày xảy ra.' }] },
+                    { dataField: 'AccidentCause', label: { text: 'Nguyên nhân' }, editorType: 'dxSelectBox', editorOptions: { dataSource: causes, valueExpr: 'Name', displayExpr: 'Name', searchEnabled: true, showClearButton: true, placeholder: 'Chọn nguyên nhân (nếu có)' } },
+                    { dataField: 'AccidentType', label: { text: 'Loại tai nạn/sự cố' }, editorType: 'dxSelectBox', editorOptions: { dataSource: types, valueExpr: 'Name', displayExpr: 'Name', searchEnabled: true, showClearButton: true, placeholder: 'Chọn loại (nếu có)' } },
+                    { dataField: 'LossDescription', colSpan: 2, label: { text: 'Mô tả tai nạn/tổn thất thực tế' }, isRequired: true, editorType: 'dxTextArea', editorOptions: { minHeight: 110, maxLength: 1000 }, validationRules: [{ type: 'required', message: 'Vui lòng nhập mô tả.' }, { type: 'stringLength', max: 1000 }] }
+                ]
+            }).dxForm('instance');
+
+            if (isEdit) {
+                $.getJSON(apiUrl + '/' + encodeURIComponent(id))
+                    .done(function (row) { form.option('formData', $.extend({}, row, { AccidentDate: row.AccidentDate ? new Date(row.AccidentDate) : null })); })
+                    .fail(function (xhr) { showError(getError(xhr)); saveButton.dxButton('instance').option('disabled', true); });
+            }
+        }).fail(function (xhr) {
+            showError(getError(xhr) + ' (Kiểm tra các danh mục vật tư, bộ phận, nguyên nhân và loại tai nạn.)');
+            saveButton.dxButton('instance').option('disabled', true);
+        });
+
+        function save() {
+            if (!form) return;
+            var validation = form.validate();
+            if (!validation.isValid) return;
+            var payload = $.extend({}, form.option('formData'));
+            if (payload.AccidentDate instanceof Date) payload.AccidentDate = toLocalDateTime(payload.AccidentDate);
+            if (isEdit) payload.Id = id;
+            saveButton.dxButton('instance').option('disabled', true);
+            $('#accident-form-error').hide().empty();
+            $.ajax({
+                url: isEdit ? apiUrl + '/' + encodeURIComponent(id) : apiUrl,
+                method: isEdit ? 'PUT' : 'POST',
+                contentType: 'application/json; charset=utf-8',
+                data: JSON.stringify(payload)
+            }).done(function () {
+                DevExpress.ui.notify(isEdit ? 'Đã cập nhật phiếu tai nạn/sự cố.' : 'Đã tạo phiếu tai nạn/sự cố.', 'success', 1800);
+                window.location.href = listUrl;
+            }).fail(function (xhr) {
+                showError(getError(xhr));
+                saveButton.dxButton('instance').option('disabled', false);
+            });
+        }
+    });
+</script>
+}
