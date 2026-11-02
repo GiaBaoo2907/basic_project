@@ -18,24 +18,37 @@ var sidebar = [{
     id: "2",
     text: "Quản lý kiểm định",
     icon: "folder",
-    expanded: false,
+    expanded: true,
     items: [{
         id: "2-1",
         text: "Theo dõi thiết bị",
         icon: "folder",
+        url: "InspectionDevice/Index"
     }, {
         id: "2-2",
         text: "Yêu cầu kiểm định",
         icon: "folder",
+        url: "Inspection/Index"
     }]
 }, {
     id: "3",
+    text: "Tai nạn/sự cố",
+    icon: "folder",
+    expanded: true,
+    items: [{
+        id: "3-1",
+        text: "Quản lý tai nạn/ sự cố",
+        icon: "folder",
+        url: "Accident/Index",
+    }]
+}, {
+    id: "4",
     text: "Thống kê & Báo cáo",
     icon: "chart",
     url: "Report/Index"
 }, {
-    id: "4",
+    id: "5",
     text: "Quản trị",
-    icon: "folder",
+    icon: "preferences",
     url: "Manage/Index"
 }];
