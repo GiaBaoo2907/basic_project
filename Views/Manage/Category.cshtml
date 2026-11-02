@@ -1,0 +1,386 @@
+@model DeviceManagement.Models.ManageCategory
+@{
+    ViewBag.Title = Model.Name;
+    var needsStatusFields = Model.Key == "statuses";
+    var isEditable = ViewBag.IsEditable != null && (bool)ViewBag.IsEditable;
+    var categoryKey = System.Web.Helpers.Json.Encode(Model.Key);
+    var categoryName = System.Web.Helpers.Json.Encode(Model.Name);
+}
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.common.css" />
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.light.css" />
+<style>
+    .manage-category-heading { margin-bottom: 18px; padding: 14px 18px; color: #35414c; background: #edf1f5; border: 1px solid #d9dfe6; border-left: 4px solid #337ab7; border-radius: 5px; }
+    .manage-category-heading h1 { margin: 0 0 5px; font-size: 22px; font-weight: 700; }
+    .manage-category-heading p { margin: 0; color: #66717c; }
+    .manage-category-grid { padding: 16px; background: #fff; border: 1px solid #d9dfe6; border-radius: 5px; }
+    .manage-category-error { white-space: pre-wrap; }
+    .catalog-color-swatch { display: inline-block; width: 22px; height: 22px; border: 1px solid #c7cdd3; border-radius: 4px; vertical-align: middle; }
+    .catalog-status-preview { display: inline-block; padding: 4px 9px; border: 1px solid #c7cdd3; border-radius: 12px; font-weight: 600; }
+</style>
+
+<section>
+    <header class="manage-category-heading">
+        <h1>@Model.Name</h1>
+        <p>@Model.Description</p>
+    </header>
+    @if (isEditable)
+    {
+        <div id="manage-category-error" class="alert alert-danger manage-category-error d-none"></div>
+        <div class="manage-category-grid">
+            <div id="manage-category-table"></div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">Chức năng thêm, sửa, xóa cho danh mục này sẽ được bổ sung sau.</div>
+    }
+</section>
+
+@section scripts {
+    @if (isEditable)
+    {
+    <script>
+        $(function () {
+            var categoryKey = @Html.Raw(categoryKey);
+            var categoryName = @Html.Raw(categoryName);
+            var requiresStatusFields = @needsStatusFields.ToString().ToLowerInvariant();
+            var apiUrl = '@Url.Content("~/api/catalogapi")/' + encodeURIComponent(categoryKey);
+            var isMaterialCatalog = categoryKey === "materials";
+            var isUnitCatalog = categoryKey === "units";
+            var isProjectCatalog = categoryKey === "projects";
+            var isInsuranceTypeCatalog = categoryKey === "insurance-types";
+            var isSupplierCatalog = categoryKey === "suppliers";
+            var isInspectionTypeCatalog = categoryKey === "inspection-types";
+            var isAccidentCauseCatalog = categoryKey === "accidents-cause";
+            var isAccidentTypeCatalog = categoryKey === "accidents-types";
+            var hasDescription = requiresStatusFields || categoryKey === "classifications" ||
+                isProjectCatalog || isInsuranceTypeCatalog || isSupplierCatalog || isInspectionTypeCatalog ||
+                isAccidentCauseCatalog || isAccidentTypeCatalog;
+            var codeCaption = requiresStatusFields ? "Mã tình trạng" :
+                isUnitCatalog ? "Mã đơn vị" :
+                categoryKey === "classifications" ? "Mã phân loại" :
+                isProjectCatalog ? "Mã bộ phận/dự án" :
+                isInspectionTypeCatalog ? "Mã loại kiểm định" :
+                isInsuranceTypeCatalog ? "Mã loại bảo hiểm" :
+                isAccidentCauseCatalog ? "Mã nguyên nhân" :
+                isAccidentTypeCatalog ? "Mã loại tai nạn/sự cố" : "Mã nhà cung cấp";
+            var codeLength = isProjectCatalog ? 30 : 20;
+            var nameLength = requiresStatusFields || isUnitCatalog ? 100 :
+                isMaterialCatalog ? 250 :
+                isInsuranceTypeCatalog || isSupplierCatalog || isInspectionTypeCatalog ||
+                isAccidentCauseCatalog || isAccidentTypeCatalog ? 200 : 150;
+            
+
+            function showError(message) {
+                $("#manage-category-error").text(message || "Không thể hoàn tất thao tác với danh mục.").removeClass("d-none");
+            }
+
+            function clearError() {
+                $("#manage-category-error").addClass("d-none").empty();
+            }
+
+            function responseMessage(xhr) {
+                var response = xhr.responseJSON;
+                return response && (response.Message || response.message) || xhr.responseText;
+            }
+
+            var loadedItems = [];
+            var store = new DevExpress.data.CustomStore({
+                key: "Id",
+                load: function () {
+                    return $.getJSON(apiUrl).then(function (items) {
+                        clearError();
+                        loadedItems = items || [];
+                        return items;
+                    }).fail(function (xhr) {
+                        showError(responseMessage(xhr) || "Không tải được dữ liệu " + categoryName + ".");
+                    });
+                },
+                insert: function (values) {
+                    return $.ajax({
+                        url: apiUrl,
+                        method: "POST",
+                        contentType: "application/json; charset=utf-8",
+                        data: JSON.stringify(values)
+                    }).fail(function (xhr) { showError(responseMessage(xhr)); });
+                },
+                update: function (id, values) {
+                    var original = loadedItems.find(function (item) { return item.Id === id; }) || {};
+                    return $.ajax({
+                        url: apiUrl + "/" + encodeURIComponent(id),
+                        method: "PUT",
+                        contentType: "application/json; charset=utf-8",
+                        data: JSON.stringify($.extend({}, original, values))
+                    }).fail(function (xhr) { showError(responseMessage(xhr)); });
+                },
+                remove: function (id) {
+                    return $.ajax({
+                        url: apiUrl + "/" + encodeURIComponent(id),
+                        method: "DELETE"
+                    }).fail(function (xhr) { showError(responseMessage(xhr)); });
+                }
+            });
+
+            function lookupStore(lookupKey) {
+                var lookupUrl = '@Url.Content("~/api/catalogapi")/' + lookupKey;
+                return new DevExpress.data.CustomStore({
+                    key: "Id",
+                    load: function () {
+                        return $.getJSON(lookupUrl);
+                    },
+                    byKey: function (key) {
+                        return $.getJSON(lookupUrl).then(function (items) {
+                            return (items || []).find(function (item) {
+                                return String(item.Id) === String(key) || String(item.Name) === String(key);
+                            }) || null;
+                        });
+                    }
+                });
+            }
+
+            var columns = [];
+            var formItems = [];
+            if (isMaterialCatalog) {
+                columns.push({ dataField: "Code", caption: "Mã vật tư", allowEditing: false });
+                columns.push({
+                    dataField: "Name",
+                    caption: "Tên vật tư",
+                    validationRules: [{ type: "required", message: "Vui lòng nhập tên vật tư." }]
+                });
+                columns.push({
+                    dataField: "Classification",
+                    caption: "Phân loại",
+                    lookup: {
+                        dataSource: lookupStore("classifications"),
+                        valueExpr: "Name",
+                        displayExpr: "Name"
+                    }
+                });
+                columns.push({
+                    dataField: "UnitOfMeasure",
+                    caption: "Đơn vị tính",
+                    lookup: {
+                        dataSource: lookupStore("units"),
+                        valueExpr: "Name",
+                        displayExpr: "Name"
+                    }
+                });
+                columns.push({
+                    dataField: "Quantity",
+                    caption: "Số lượng",
+                    dataType: "number",
+                    validationRules: [{ type: "required" }, { type: "numeric", min: 1 }]
+                });
+                formItems = [
+                    { dataField: "Code", label: { text: "Mã vật tư" }, editorOptions: { readOnly: true } },
+                    {
+                        dataField: "Name",
+                        label: { text: "Tên vật tư" },
+                        editorOptions: { maxLength: nameLength },
+                        validationRules: [{ type: "required", message: "Vui lòng nhập tên vật tư." }]
+                    },
+                    {
+                        dataField: "Classification",
+                        label: { text: "Phân loại" },
+                        editorType: "dxSelectBox",
+                        editorOptions: {
+                            dataSource: lookupStore("classifications"),
+                            valueExpr: "Name",
+                            displayExpr: "Name",
+                            searchEnabled: true,
+                            showClearButton: true
+                        }
+                    },
+                    {
+                        dataField: "UnitOfMeasure",
+                        label: { text: "Đơn vị tính" },
+                        editorType: "dxSelectBox",
+                        editorOptions: {
+                            dataSource: lookupStore("units"),
+                            valueExpr: "Name",
+                            displayExpr: "Name",
+                            searchEnabled: true,
+                            showClearButton: true
+                        }
+                    },
+                    {
+                        dataField: "Quantity",
+                        label: { text: "Số lượng" },
+                        editorType: "dxNumberBox",
+                        editorOptions: { min: 1, showSpinButtons: true },
+                        validationRules: [{ type: "required" }, { type: "numeric", min: 1 }]
+                    }
+                ];
+            } else {
+                columns.push({
+                    dataField: "Name",
+                    caption: categoryName,
+                    validationRules: [{ type: "required", message: "Vui lòng nhập tên." }]
+                });
+                formItems.push({
+                    dataField: "Name",
+                    label: { text: categoryName },
+                    editorOptions: { maxLength: nameLength },
+                    validationRules: [{ type: "required", message: "Vui lòng nhập tên." }]
+                });
+            }
+
+            if (!isMaterialCatalog) {
+                columns.push({
+                    dataField: "Code",
+                    caption: codeCaption,
+                    validationRules: [{ type: "required", message: "Vui lòng nhập mã danh mục." }]
+                });
+                formItems.push({
+                    dataField: "Code",
+                    label: { text: codeCaption },
+                    editorOptions: { maxLength: codeLength },
+                    validationRules: [{ type: "required", message: "Vui lòng nhập mã danh mục." }]
+                });
+            }
+
+            if (isProjectCatalog) {
+                columns.push({
+                    dataField: "EntityType",
+                    caption: "Loại",
+                    lookup: {
+                        dataSource: [
+                            { value: "DEPARTMENT", text: "Bộ phận" },
+                            { value: "PROJECT", text: "Dự án" }
+                        ],
+                        valueExpr: "value",
+                        displayExpr: "text"
+                    }
+                });
+                formItems.push({
+                    dataField: "EntityType",
+                    label: { text: "Loại" },
+                    editorType: "dxSelectBox",
+                    editorOptions: {
+                        dataSource: [
+                            { value: "DEPARTMENT", text: "Bộ phận" },
+                            { value: "PROJECT", text: "Dự án" }
+                        ],
+                        valueExpr: "value",
+                        displayExpr: "text"
+                    },
+                    validationRules: [{ type: "required", message: "Vui lòng chọn loại." }]
+                });
+            }
+
+            if (hasDescription) {
+                columns.push({ dataField: "Description", caption: "Mô tả" });
+                formItems.push({
+                    dataField: "Description",
+                    label: { text: "Mô tả" },
+                    editorType: "dxTextArea",
+                    editorOptions: { maxLength: 255, minHeight: 70 }
+                });
+            }
+
+            if (requiresStatusFields) {
+                columns.push({
+                    dataField: "TextColor",
+                    caption: "Mã màu chữ",
+                    validationRules: [{ type: "required", message: "Vui lòng chọn mã màu chữ." }],
+                    cellTemplate: function (container, info) {
+                        $("<span>").addClass("catalog-color-swatch")
+                            .css("background-color", info.value || "transparent")
+                            .attr("title", info.value || "")
+                            .appendTo(container);
+                        $("<span>").text(" " + (info.value || "")).appendTo(container);
+                    }
+                });
+                columns.push({
+                    dataField: "BackgroundColor",
+                    caption: "Mã màu nền",
+                    validationRules: [{ type: "required", message: "Vui lòng chọn mã màu nền." }],
+                    cellTemplate: function (container, info) {
+                        $("<span>").addClass("catalog-color-swatch")
+                            .css("background-color", info.value || "transparent")
+                            .attr("title", info.value || "")
+                            .appendTo(container);
+                        $("<span>").text(" " + (info.value || "")).appendTo(container);
+                    }
+                });
+                columns.push({
+                    caption: "Xem trước",
+                    allowFiltering: false,
+                    allowSorting: false,
+                    cellTemplate: function (container, info) {
+                        $("<span>").addClass("catalog-status-preview")
+                            .text(info.data.Name || "")
+                            .css({
+                                color: info.data.TextColor || "",
+                                backgroundColor: info.data.BackgroundColor || ""
+                            })
+                            .appendTo(container);
+                    }
+                });
+                formItems.push({
+                    dataField: "TextColor",
+                    label: { text: "Mã màu chữ" },
+                    editorType: "dxColorBox",
+                    editorOptions: { editAlphaChannel: false, applyButtonText: "Chọn", cancelButtonText: "Hủy" },
+                    validationRules: [{ type: "required", message: "Vui lòng chọn mã màu chữ." }]
+                });
+                formItems.push({
+                    dataField: "BackgroundColor",
+                    label: { text: "Mã màu nền" },
+                    editorType: "dxColorBox",
+                    editorOptions: { editAlphaChannel: false, applyButtonText: "Chọn", cancelButtonText: "Hủy" },
+                    validationRules: [{ type: "required", message: "Vui lòng chọn mã màu nền." }]
+                });
+            }
+
+            $("#manage-category-table").dxDataGrid({
+                dataSource: new DevExpress.data.DataSource({ store: store }),
+                showBorders: true,
+                showRowLines: true,
+                rowAlternationEnabled: true,
+                columnAutoWidth: true,
+                noDataText: "Danh mục này chưa có dữ liệu.",
+                columns: columns,
+                paging: { pageSize: 10 },
+                pager: { showInfo: true, showPageSizeSelector: true, allowedPageSizes: [10, 20, 50] },
+                searchPanel: { visible: true, placeholder: "Tìm trong danh mục...", width: 260 },
+                filterRow: { visible: true },
+                editing: {
+                    mode: "popup",
+                    allowAdding: true,
+                    allowUpdating: true,
+                    allowDeleting: true,
+                    useIcons: true,
+                    texts: {
+                        addRow: "Thêm " + categoryName,
+                        editRow: "Sửa",
+                        deleteRow: "Xóa",
+                        saveRow: "Lưu",
+                        cancelRow: "Hủy",
+                        confirmDeleteMessage: "Bạn có chắc muốn xóa mục này?"
+                    },
+                    popup: {
+                        title: "Thông tin " + categoryName,
+                        showTitle: true,
+                        width: 600,
+                        maxWidth: "95vw",
+                        onContentReady: function (e) {
+                            var $popup = $(e.component.content()).closest(".dx-popup");
+                            $popup.find(".dx-datagrid-save-button .dx-button-text").text("Lưu");
+                            $popup.find(".dx-datagrid-cancel-button .dx-button-text").text("Hủy");
+                        }
+                    },
+                    form: { colCount: 1, items: formItems }
+                },
+                onDataErrorOccurred: function (e) {
+                    showError(responseMessage(e.error) || "Không thể hoàn tất thao tác với danh mục.");
+                },
+                onInitNewRow: function (e) {
+                    if (isMaterialCatalog) e.data.Quantity = 1;
+                    if (isProjectCatalog) e.data.EntityType = "DEPARTMENT";
+                }
+            });
+        });
+    </script>
+    }
+}

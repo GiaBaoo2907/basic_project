@@ -1,59 +1,223 @@
+@model System.Collections.Generic.IEnumerable<DeviceManagement.Models.ManageCategory>
+@using System.Linq
 @{
-    ViewBag.Title = "Cấu trúc danh mục";
+    ViewBag.Title = "Quản lý danh mục";
+    var categories = Model.ToList();
+    var categoryIcons = new System.Collections.Generic.Dictionary<string, string>
+    {
+        { "roles", "user" },
+        { "departments", "group" },
+        { "navigation", "menu" },
+        { "statuses", "check" },
+        { "units", "box" },
+        { "classifications", "bulletlist" },
+        { "projects", "group" },
+        { "insurance-types", "card" },
+        { "suppliers", "home" },
+        { "materials", "product" },
+        { "inspection-types", "search" },
+        { "accidents-cause", "check" },
+        { "accidents-types", "warning" }
+    };
 }
-<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.light.css" />
-<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.common.css" />
 
-<div class="mb-3">
-    <h1 class="h3">Cấu trúc danh mục điều hướng</h1>
-    <p class="text-muted mb-0">Trang chỉ hiển thị các nhóm cha và danh mục con trong thanh điều hướng.</p>
-</div>
+<style>
+    .manage-page { --manage-ink: #263238; --manage-muted: #6c7785; --manage-line: #dfe4ea; }
+    .manage-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 22px; }
+    .manage-heading h1 { margin: 0 0 5px; color: var(--manage-ink); font-size: 25px; font-weight: 700; }
+    .manage-heading p { margin: 0; color: var(--manage-muted); }
+    .manage-toolbar { display: flex; align-items: center; gap: 10px; width: min(100%, 460px); }
+    .manage-search { flex: 1; min-width: 180px; }
+    .manage-filter { width: 180px; }
+    .manage-section { margin-bottom: 14px; padding: 12px; background: #fff; border: 1px solid var(--manage-line); border-radius: 7px; }
+    .manage-section-heading { display: flex; align-items: center; gap: 9px; margin: 0 0 8px; }
+    .manage-section-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; color: #343a40; background: #f1f3f5; border-radius: 7px; }
+    .manage-section-icon .dx-icon { font-size: 18px; }
+    .manage-section-title { margin: 0; color: var(--manage-ink); font-size: 16px; font-weight: 700; }
+    .manage-section-subtitle { margin: 2px 0 0; color: var(--manage-muted); font-size: 12px; }
+    .manage-section-count { display: inline-block; margin-left: 6px; padding: 2px 7px; color: #596574; background: #f1f3f5; border-radius: 12px; font-size: 11px; font-weight: 600; vertical-align: 2px; }
+    .manage-tile-view { width: 100%; }
+    .manage-tile-view .dx-tile { border: 0; background: transparent; }
+    .manage-tile-view .dx-tile-content { padding: 0; }
+    .manage-category-card { display: flex; align-items: center; height: 70px; gap: 9px; padding: 9px; color: inherit; background: #fff; border: 1px solid var(--manage-line); border-radius: 6px; text-decoration: none; transition: border-color .15s ease, box-shadow .15s ease; }
+    .manage-category-card:hover, .manage-category-card:focus { color: inherit; border-color: #b8bec8; box-shadow: 0 4px 14px rgba(30, 40, 55, .08); text-decoration: none; }
+    .manage-category-icon { display: inline-flex; flex: 0 0 34px; align-items: center; justify-content: center; width: 34px; height: 34px; color: #343a40; background: #f1f3f5; border-radius: 7px; }
+    .manage-category-icon .dx-icon { font-size: 17px; }
+    .manage-category-copy { overflow: hidden; min-width: 0; flex: 1; }
+    .manage-category-copy h3 { overflow: hidden; margin: 0 0 3px; color: var(--manage-ink); font-size: 13px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .manage-category-copy p { overflow: hidden; margin: 0; color: var(--manage-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .manage-category-arrow { color: #626d7a; }
+    @@media (max-width: 575px) {
+        .manage-toolbar { align-items: stretch; flex-direction: column; width: 100%; }
+        .manage-search, .manage-filter { width: 100%; }
+        .manage-section { padding: 12px; }
+    }
+</style>
 
-<div id="module-tree"></div>
+<main class="manage-page">
+    <header class="manage-heading">
+        <div>
+            <h1>Quản lý danh mục</h1>
+            <p>Chọn danh mục để xem và quản lý dữ liệu cấu hình của hệ thống.</p>
+        </div>
+        <div class="manage-toolbar">
+            <div id="manageCategorySearch" class="manage-search"></div>
+            <div id="manageCategoryFilter" class="manage-filter"></div>
+        </div>
+    </header>
 
-@section scripts{
-    <!-- <script src="https://cdn3.devexpress.com/jslib/22.2.6/js/dx.all.js"></script> -->
+    @foreach (var categoryGroup in categories.GroupBy(category => category.Group ?? string.Empty))
+    {
+        var isAccidentGroup = categoryGroup.Key == "Quản lý tai nạn/sự cố";
+        var isInsuranceGroup = categoryGroup.Key == "Quản lý bảo hiểm";
+        var isInspectionGroup = categoryGroup.Key == "Quản lý kiểm định";
+        var isBusinessGroup = isInsuranceGroup || isAccidentGroup || isInspectionGroup;
+        var groupKey = isAccidentGroup ? "accidents" : isInsuranceGroup ? "insurance" : isInspectionGroup ? "inspection" : "system";
+        var groupName = isBusinessGroup ? categoryGroup.Key : "Danh mục hệ thống";
+        var groupDescription = isAccidentGroup
+            ? "Thiết lập nguyên nhân và loại tai nạn/sự cố."
+            : isInsuranceGroup
+            ? "Thiết lập thông tin phục vụ quản lý bảo hiểm."
+            : isInspectionGroup
+            ? "Thiết lập các loại kiểm định áp dụng cho thiết bị."
+            : "Quản lý các dữ liệu cấu hình chung của hệ thống.";
+        var tileItems = categoryGroup.Select(category => new
+        {
+            Name = category.Name,
+            Description = category.Description,
+            Icon = categoryIcons.ContainsKey(category.Key) ? categoryIcons[category.Key] : "folder",
+            Url = category.Key == "navigation"
+                ? Url.Action("Navigation", "Manage")
+                : Url.Action("Category", "Manage", new { id = category.Key }),
+            SearchText = (category.Name + " " + category.Description).ToLowerInvariant()
+        }).ToList();
+        var tileItemsJson = System.Web.Helpers.Json.Encode(tileItems);
+
+        <section class="manage-section" data-category-group="@groupKey">
+            <header class="manage-section-heading">
+                <span class="manage-section-icon" aria-hidden="true">
+                    <span class="dx-icon dx-icon-@(isInsuranceGroup ? "card" : isInspectionGroup ? "search" : "bulletlist")"></span>
+                </span>
+                <div>
+                    <h2 class="manage-section-title">@groupName <span class="manage-section-count">@categoryGroup.Count() danh mục</span></h2>
+                    <p class="manage-section-subtitle">@groupDescription</p>
+                </div>
+            </header>
+            <div class="manage-tile-view" data-items="@tileItemsJson"></div>
+        </section>
+    }
+</main>
+
+@section scripts {
     <script>
         $(function () {
-            var treeRows = [];
+            var sections = [];
+            var tileWidth = 250;
+            var tileHeight = 70;
+            var tileMargin = 8;
 
-            function addItems(items, parentId) {
-                items.forEach(function (item) {
-                    treeRows.push({
-                        id: item.id,
-                        parentId: parentId,
-                        text: item.text,
-                        icon: item.icon || ""
+            function tileViewHeight(width, itemCount) {
+                if (!itemCount) return tileHeight + tileMargin * 2;
+                var columns = Math.max(1, Math.floor((width + tileMargin) / (tileWidth + tileMargin)));
+                var rows = Math.ceil(itemCount / columns);
+                return rows * (tileHeight + tileMargin) + tileMargin;
+            }
+
+            $(".manage-tile-view").each(function () {
+                var $tile = $(this);
+                var items = JSON.parse($tile.attr("data-items"));
+                var section = $tile.closest(".manage-section");
+                var viewHeight = tileViewHeight($tile.width(), items.length);
+                var tileView = $tile.dxTileView({
+                    dataSource: items,
+                    direction: "vertical",
+                    width: "100%",
+                    height: viewHeight,
+                    baseItemWidth: tileWidth,
+                    baseItemHeight: tileHeight,
+                    itemMargin: tileMargin,
+                    showScrollbar: "onHover",
+                    itemTemplate: function (item, index, element) {
+                        var $card = $("<a>")
+                            .addClass("manage-category-card")
+                            .attr("href", item.Url);
+                        $("<span>")
+                            .addClass("manage-category-icon")
+                            .attr("aria-hidden", "true")
+                            .append($("<span>").addClass("dx-icon dx-icon-" + item.Icon))
+                            .appendTo($card);
+                        var $copy = $("<span>").addClass("manage-category-copy").appendTo($card);
+                        $("<h3>").text(item.Name).appendTo($copy);
+                        $("<p>").text(item.Description || "").appendTo($copy);
+                        $("<span>")
+                            .addClass("dx-icon dx-icon-chevronright manage-category-arrow")
+                            .attr("aria-hidden", "true")
+                            .appendTo($card);
+                        $(element).append($card);
+                    }
+                }).dxTileView("instance");
+                sections.push({
+                    key: section.data("category-group"),
+                    element: section,
+                    tileView: tileView,
+                    items: items
+                });
+            });
+
+            function filterCategories() {
+                var query = String($("#manageCategorySearch").dxTextBox("instance").option("value") || "")
+                    .trim()
+                    .toLocaleLowerCase();
+                var selectedGroup = $("#manageCategoryFilter").dxSelectBox("instance").option("value");
+
+                sections.forEach(function (section) {
+                    var groupMatches = !selectedGroup || selectedGroup === section.key;
+                    var visibleItems = section.items.filter(function (item) {
+                        return groupMatches && (!query || item.SearchText.indexOf(query) >= 0);
                     });
 
-                    if (item.items && item.items.length) {
-                        addItems(item.items, item.id);
-                    }
+                    section.tileView.option("dataSource", visibleItems);
+                    section.element.toggle(visibleItems.length > 0);
+                    section.tileView.option("height", tileViewHeight(
+                        section.tileView.element().width(),
+                        visibleItems.length
+                    ));
                 });
             }
 
-            if (typeof sidebar === "undefined" || !Array.isArray(sidebar)) {
-                console.error("Không tìm thấy dữ liệu thanh điều hướng (sidebar-data.js).");
-                $("#module-tree").text("Không tải được cấu trúc danh mục.");
-                return;
-            }
+            $("#manageCategorySearch").dxTextBox({
+                mode: "search",
+                placeholder: "Tìm kiếm danh mục...",
+                valueChangeEvent: "input",
+                onValueChanged: filterCategories
+            });
+            $("#manageCategoryFilter").dxSelectBox({
+                dataSource: [
+                    { key: "", name: "Tất cả nhóm" },
+                    { key: "system", name: "Danh mục hệ thống" },
+                    { key: "insurance", name: "Quản lý bảo hiểm" },
+                    { key: "inspection", name: "Quản lý kiểm định" },
+                    { key: "accidents", name: "Quản lý tai nạn/sự cố" }
+                ],
+                valueExpr: "key",
+                displayExpr: "name",
+                value: "",
+                onValueChanged: filterCategories
+            });
 
-            addItems(sidebar, null);
-
-            $("#module-tree").dxTreeList({
-                dataSource: treeRows,
-                keyExpr: "id",
-                parentIdExpr: "parentId",
-                rootValue: null,
-                dataStructure: "plain",
-                autoExpandAll: true,
-                showBorders: true,
-                columnAutoWidth: true,
-                columns: [
-                    { dataField: "text", caption: "Nhóm / danh mục" },
-                    { dataField: "id", caption: "Mã", width: 120 },
-                    { dataField: "icon", caption: "Biểu tượng", width: 150 }
-                ]
+            var resizeTimer;
+            $(window).on("resize", function () {
+                window.clearTimeout(resizeTimer);
+                resizeTimer = window.setTimeout(function () {
+                    sections.forEach(function (section) {
+                        if (section.element.is(":visible")) {
+                            section.tileView.option("height", tileViewHeight(
+                                section.tileView.element().width(),
+                                section.tileView.option("dataSource").length
+                            ));
+                        }
+                    });
+                }, 100);
             });
         });
     </script>

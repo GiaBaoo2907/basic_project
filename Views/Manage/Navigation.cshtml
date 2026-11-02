@@ -1,0 +1,62 @@
+@{
+    ViewBag.Title = "Dẫn hướng";
+}
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.light.css" />
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.common.css" />
+
+<div class="d-flex flex-wrap align-items-center justify-content-between mb-3">
+    <div>
+        <h1 class="h3 mb-1">Dẫn hướng</h1>
+        <p class="text-muted mb-0">Cấu trúc nhóm và danh mục trong thanh điều hướng.</p>
+    </div>
+    <a class="btn btn-outline-secondary mt-2" href="@Url.Action("Index", "Manage")">Quay lại danh mục</a>
+</div>
+
+<div id="module-tree"></div>
+
+@section scripts{
+    <script>
+        $(function () {
+            var treeRows = [];
+
+            function addItems(items, parentId) {
+                items.forEach(function (item) {
+                    treeRows.push({
+                        id: item.id,
+                        parentId: parentId,
+                        text: item.text,
+                        icon: item.icon || ""
+                    });
+
+                    if (item.items && item.items.length) {
+                        addItems(item.items, item.id);
+                    }
+                });
+            }
+
+            if (typeof sidebar === "undefined" || !Array.isArray(sidebar)) {
+                console.error("Không tìm thấy dữ liệu thanh điều hướng (sidebar-data.js).");
+                $("#module-tree").text("Không tải được cấu trúc danh mục.");
+                return;
+            }
+
+            addItems(sidebar, null);
+
+            $("#module-tree").dxTreeList({
+                dataSource: treeRows,
+                keyExpr: "id",
+                parentIdExpr: "parentId",
+                rootValue: null,
+                dataStructure: "plain",
+                autoExpandAll: true,
+                showBorders: true,
+                columnAutoWidth: true,
+                columns: [
+                    { dataField: "text", caption: "Nhóm / danh mục" },
+                    { dataField: "id", caption: "Mã", width: 120 },
+                    { dataField: "icon", caption: "Biểu tượng", width: 150 }
+                ]
+            });
+        });
+    </script>
+}
