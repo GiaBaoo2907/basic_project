@@ -1,0 +1,127 @@
+@{
+    ViewBag.Title = "Sửa thiết bị";
+    var deviceId = ViewBag.DeviceId == null ? 0 : (int)ViewBag.DeviceId;
+}
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.common.css" />
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.light.css" />
+<style>
+    .device-edit-card { --grid-text: #263238; --grid-heading: #35414c; --grid-border: #d9dfe6; --grid-header: #edf1f5; --grid-stripe: #fafbfd; --grid-accent: #337ab7; margin: 24px auto; padding: 22px; background: #fff; color: var(--grid-text); border: 1px solid var(--grid-border); border-radius: 6px; box-shadow: 0 8px 24px rgba(30,50,80,.08); }
+    #deviceEditTitle { margin: 0 0 18px; padding: 12px 15px; color: var(--grid-heading); background: var(--grid-header); border: 1px solid var(--grid-border); border-left: 4px solid var(--grid-accent); border-radius: 4px; font-size: 20px; font-weight: 700; }
+    #deviceEditForm .dx-field-item-label-text { color: var(--grid-heading); font-weight: 600; }
+    #deviceEditForm .dx-texteditor { background: var(--grid-stripe); border-color: var(--grid-border); }
+</style>
+
+<section class="device-edit-card">
+    <h1 id="deviceEditTitle">Chỉnh sửa thiết bị</h1>
+    <div id="deviceEditError" class="alert alert-danger d-none"></div>
+    <div id="deviceEditForm"></div>
+    <div class="d-flex justify-content-end gap-2 mt-4">
+        <a class="btn btn-outline-secondary" href="@Url.Action("Index", "InspectionDevice")">Thoát</a>
+        <div id="saveDeviceEdit"></div>
+    </div>
+</section>
+
+@section scripts {
+    <script src="https://cdn3.devexpress.com/jslib/22.2.6/js/dx.all.js"></script>
+    <script>
+        $(function () {
+            var apiUrl = '@Url.Content("~/api/inspectiondeviceapi")/@deviceId';
+            var catalogApiUrl = '@Url.Content("~/api/catalogapi")';
+            var form;
+            function showError(message) { $("#deviceEditError").text(message || "Không tải hoặc lưu được thiết bị.").removeClass("d-none"); }
+            function dateString(value) {
+                if (!value) return null;
+                var date = value instanceof Date ? value : new Date(value);
+                if (isNaN(date.getTime())) return null;
+                return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+            }
+            function dateValue(value) { return value ? new Date(value) : null; }
+
+            $.getJSON(apiUrl).done(function (device) {
+                device.PurchaseDate = dateValue(device.PurchaseDate);
+                device.ExpiryDate = dateValue(device.ExpiryDate);
+                $("#deviceEditTitle").text(device.DeviceName || "Chỉnh sửa thiết bị");
+                $.when(
+                    $.getJSON(catalogApiUrl + "/materials"),
+                    $.getJSON(catalogApiUrl + "/classifications"),
+                    $.getJSON(catalogApiUrl + "/projects"),
+                    $.getJSON(catalogApiUrl + "/statuses"),
+                    $.getJSON(catalogApiUrl + "/units"),
+                    $.getJSON(catalogApiUrl + "/suppliers")
+                ).done(function (materials, classifications, projects, statuses, units, suppliers) {
+                    var materialOptions = materials[0];
+                    var selectedMaterial = materialOptions.find(function (item) { return item.Code === device.MaterialCode; });
+                    if (selectedMaterial) {
+                        device.DeviceName = selectedMaterial.Name;
+                        device.Classification = selectedMaterial.Classification || device.Classification;
+                        device.UnitOfMeasure = selectedMaterial.UnitOfMeasure || device.UnitOfMeasure;
+                    }
+                    var classificationOptions = classifications[0].map(function (item) { return item.Name; });
+                    var projectOptions = projects[0].map(function (item) { return item.Name; });
+                    var statusOptions = statuses[0].map(function (item) { return item.Name; });
+                    var unitOptions = units[0].map(function (item) { return item.Name; });
+                    var supplierOptions = suppliers[0].map(function (item) { return item.Name; });
+                    form = $("#deviceEditForm").dxForm({
+                        formData: device, colCount: 3, labelLocation: "top",
+                        onFieldDataChanged: function (e) {
+                            if (e.dataField !== "MaterialCode") return;
+                            var selectedMaterial = materialOptions.find(function (item) {
+                                return item.Code === e.value;
+                            });
+                            e.component.updateData("DeviceName", selectedMaterial && selectedMaterial.Name || null);
+                            e.component.updateData("Classification", selectedMaterial && selectedMaterial.Classification || null);
+                            e.component.updateData("UnitOfMeasure", selectedMaterial && selectedMaterial.UnitOfMeasure || null);
+                        },
+                        items: [
+                            {
+                                dataField: "MaterialCode",
+                                label: { text: "Tên thiết bị / Mã vật tư *" },
+                                editorType: "dxSelectBox",
+                                editorOptions: {
+                                    dataSource: materialOptions,
+                                    displayExpr: function (item) { return item ? item.Name + " — " + item.Code : ""; },
+                                    valueExpr: "Code",
+                                    searchEnabled: true,
+                                    showClearButton: true,
+                                    acceptCustomValue: false,
+                                    placeholder: "Chọn vật tư theo mã trong danh mục"
+                                },
+                                isRequired: true,
+                                validationRules: [{ type: "required", message: "Vui lòng chọn mã vật tư từ danh mục Quản trị." }]
+                            },
+                            { dataField: "Year", label: { text: "Năm" }, editorType: "dxNumberBox", editorOptions: { min: 1900, max: 2200, showSpinButtons: true } },
+                            { dataField: "Classification", label: { text: "Phân loại" }, editorType: "dxSelectBox", editorOptions: { dataSource: classificationOptions, searchEnabled: true, showClearButton: true } },
+                            { dataField: "Department", label: { text: "Bộ phận/Dự án" }, editorType: "dxSelectBox", editorOptions: { dataSource: projectOptions, searchEnabled: true, showClearButton: true } },
+                            { dataField: "PurchaseDate", label: { text: "Ngày mua *" }, editorType: "dxDateBox", editorOptions: { type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true }, isRequired: true, validationRules: [{ type: "required", message: "Vui lòng nhập ngày mua." }] },
+                            { dataField: "ExpiryDate", label: { text: "Hạn kiểm định" }, editorType: "dxDateBox", editorOptions: { type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true, showClearButton: true } },
+                            { dataField: "Quantity", label: { text: "Số lượng" }, editorType: "dxNumberBox", editorOptions: { min: 1, showSpinButtons: true } },
+                            { dataField: "UnitOfMeasure", label: { text: "Đơn vị tính" }, editorType: "dxSelectBox", editorOptions: { dataSource: unitOptions, searchEnabled: true, showClearButton: true } },
+                            { dataField: "Value", label: { text: "Giá trị" }, editorType: "dxNumberBox", editorOptions: { min: 0, format: "#,##0.##" } },
+                            { dataField: "Supplier", label: { text: "Nhà cung cấp" }, editorType: "dxSelectBox", editorOptions: { dataSource: supplierOptions, searchEnabled: true, showClearButton: true } },
+                            { dataField: "Status", label: { text: "Trạng thái" }, editorType: "dxSelectBox", editorOptions: { dataSource: statusOptions, searchEnabled: true } }
+                        ]
+                    }).dxForm("instance");
+                }).fail(function (xhr) {
+                    showError(xhr.responseJSON && (xhr.responseJSON.Message || xhr.responseJSON.message) || "Không tải được dữ liệu danh mục.");
+                });
+            }).fail(function (xhr) {
+                showError(xhr.status === 404 ? "Không tìm thấy thiết bị trong danh mục." : "Không tải được thông tin thiết bị.");
+            });
+
+            $("#saveDeviceEdit").dxButton({
+                text: "Lưu thay đổi", icon: "save", type: "default", stylingMode: "contained",
+                onClick: function () {
+                    if (!form) return;
+                    $("#deviceEditError").addClass("d-none").empty();
+                    if (!form.validate().isValid) return;
+                    var data = $.extend({}, form.option("formData"));
+                    data.PurchaseDate = dateString(data.PurchaseDate);
+                    data.ExpiryDate = dateString(data.ExpiryDate);
+                    $.ajax({ url: apiUrl, method: "PUT", contentType: "application/json; charset=utf-8", data: JSON.stringify(data) })
+                        .done(function () { window.location.href = '@Url.Action("Index", "InspectionDevice")'; })
+                        .fail(function (xhr) { showError(xhr.responseJSON && (xhr.responseJSON.Message || xhr.responseJSON.message) || xhr.responseText); });
+                }
+            });
+        });
+    </script>
+}

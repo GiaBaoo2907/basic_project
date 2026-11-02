@@ -1,0 +1,239 @@
+@{
+    ViewBag.Title = "Theo dõi thiết bị kiểm định";
+}
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.light.css" />
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.common.css" />
+
+<style>
+    .toolbar {
+        display: flex;
+        margin-bottom: 10px;
+        gap: 10px;
+    }
+    .device-name-link { color: #000000; text-decoration: none; }
+    .device-name-link:hover { text-decoration: underline; }
+    .device-action-button { margin: 0 3px; }
+    .device-status-badge { display: inline-block; padding: 4px 9px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .device-status-active { color: #176b35; background: #e4f5e9; }
+    .device-status-stopped { color: #a1262f; background: #fde8e8; }
+    
+</style>
+
+<div class="toolbar">
+    <div id="add-device"></div>
+    <div class="search"></div>
+    <div class="category-filter"></div>
+    <div class="department-filter"></div>
+</div>
+
+<div id="device-grid"></div>
+
+@section scripts{
+    <script src="https://cdn3.devexpress.com/jslib/22.2.6/js/dx.all.js"></script>
+    <script>
+        $(function(){
+            var apiUrl = '@Url.Content("~/api/inspectiondeviceapi")';
+            var catalogApiUrl = '@Url.Content("~/api/catalogapi")';
+            var detailUrlTemplate = '@Url.Action("Display", "InspectionDevice", new { id = "__deviceId__" })';
+            var editUrlTemplate = '@Url.Action("Edit", "InspectionDevice", new { id = "__deviceId__" })';
+            var statusColors = {};
+
+            $("#add-device").dxButton({
+                text: "Thêm thiết bị",
+                type: "default",
+                icon: "plus",
+                stylingMode: "contained",
+
+                onClick: function(){
+                    window.location.href = "@Url.Action("Create","InspectionDevice")"
+                }
+            })
+
+            var grid = $("#device-grid").dxDataGrid({
+                dataSource: [],
+                noDataText: "Chưa có thiết bị kiểm định trong danh mục.",
+                columnAutoWidth: true,
+                rowAlternationEnabled: true,
+                showBorders: true,
+                paging: { pageSize: 20 },
+                pager: { showInfo: true, showPageSizeSelector: true, allowedPageSizes: [10, 20, 50] },
+                columns: [
+                    {
+                        caption: "STT", width: 70, alignment: "center", allowSorting: false,
+                        cellTemplate: function (container, info) {
+                            container.text(info.component.pageIndex() * info.component.pageSize() + info.rowIndex + 1);
+                        }
+                    },
+                    {
+                        dataField: "MaterialCode",
+                        caption: "Mã vật tư",
+                        cellTemplate: function (container, info) {
+                            var url = detailUrlTemplate.replace("__deviceId__", encodeURIComponent(info.data.DeviceId));
+                            $("<a>").addClass("device-name-link").attr("href", url).text(info.value || "").appendTo(container);
+                        }
+                    },
+                    {
+                        dataField: "DeviceName",
+                        caption: "Tên thiết bị",
+                        cellTemplate: function (container, info) {
+                            var url = detailUrlTemplate.replace("__deviceId__", encodeURIComponent(info.data.DeviceId));
+                            $("<a>").addClass("device-name-link").attr("href", url).text(info.value || "").appendTo(container);
+                        }
+                    },
+                    { dataField: "Year" , caption: "Năm" },
+                    { dataField: "Classification", caption: "Phân loại" },
+                    { dataField: "Department", caption: "Bộ phận/Dự án" },
+                    { dataField: "Supplier", caption: "Nhà cung cấp" },
+                    { dataField: "Value", caption: "Giá trị", dataType: "number", format: "#,##0.##" },
+                    {
+                        dataField: "Status", caption: "Trạng thái", alignment: "center",
+                        cellTemplate: function (container, info) {
+                            var status = (info.value || "").trim();
+                            var stopped = status.toLocaleLowerCase() === "ngừng sử dụng".toLocaleLowerCase() || status.toLocaleLowerCase() === "ngừng";
+                            var $badge = $("<span>")
+                                .addClass("device-status-badge")
+                                .addClass(stopped ? "device-status-stopped" : "device-status-active")
+                                .text(status || "Đang sử dụng")
+                                .appendTo(container);
+                            var colors = statusColors[status.toLocaleLowerCase()];
+                            if (colors) {
+                                $badge.css({
+                                    backgroundColor: colors.BackgroundColor,
+                                    color: colors.TextColor
+                                });
+                            }
+                        }
+                    },
+                    {
+                        caption: "Thao tác", width: 105, alignment: "center",
+                        allowSorting: false, allowFiltering: false,
+                        cellTemplate: function (container, info) {
+                            var id = encodeURIComponent(info.data.DeviceId);
+                            $("<div>").dxButton({
+                                icon: "edit", hint: "Sửa thiết bị", stylingMode: "text",
+                                onClick: function () { window.location.href = editUrlTemplate.replace("__deviceId__", id); }
+                            }).addClass("device-action-button").appendTo(container);
+                            $("<div>").dxButton({
+                                icon: "trash", hint: "Xóa thiết bị", stylingMode: "text",
+                                onClick: function () {
+                                    DevExpress.ui.dialog.confirm("Bạn có chắc chắn muốn xóa thiết bị ‘" + (info.data.DeviceName || "") + "’ không?", "Xác nhận xóa")
+                                        .done(function (confirmed) {
+                                            if (!confirmed) return;
+                                            $.ajax({ url: apiUrl + "/" + id, method: "DELETE" })
+                                                .done(function () {
+                                                    allDevices = allDevices.filter(function (device) { return String(device.DeviceId) !== String(info.data.DeviceId); });
+                                                    applyFilters();
+                                                    DevExpress.ui.notify("Đã xóa thiết bị.", "success", 2000);
+                                                })
+                                                .fail(function (xhr) {
+                                                    DevExpress.ui.notify(xhr.responseJSON && xhr.responseJSON.Message || "Không xóa được thiết bị.", "error", 3000);
+                                                });
+                                        });
+                                }
+                            }).addClass("device-action-button").appendTo(container);
+                        }
+                    }
+                ],
+                showBorders: true,
+            }).dxDataGrid("instance");
+
+            var selectedDepartment = null;
+            var selectedCategory = null;
+            var allDevices = [];
+            var searchText = "";
+            var $catalogError = $("<div class='alert alert-danger d-none' role='alert'>").insertBefore("#device-grid");
+
+            function showCatalogError(xhr) {
+                var response = xhr && xhr.responseJSON;
+                $catalogError.text(response && (response.Message || response.message) ||
+                    "Không tải được danh mục dùng cho bộ lọc/trạng thái.").removeClass("d-none");
+            }
+
+            function applyFilters(){
+                var keyword = searchText.trim().toLocaleLowerCase();
+                var filteredDevices = allDevices.filter(function (device) {
+                    var matchesCategory = !selectedCategory || device.Classification === selectedCategory;
+                    var matchesDepartment = !selectedDepartment || device.Department === selectedDepartment;
+                    var searchableText = [
+                        device.DeviceId,
+                        device.DeviceName,
+                        device.Year,
+                        device.Classification,
+                        device.Department,
+                        device.Value,
+                        device.Status,
+                    ].join(" ").toLocaleLowerCase();
+
+                    return matchesCategory &&
+                    matchesDepartment &&
+                    (!keyword || searchableText.indexOf(keyword)!==-1);
+                });
+
+                grid.option("dataSource", filteredDevices);
+                grid.pageIndex(0);
+            }
+
+            $(".search").dxTextBox({
+                placeholder: "Tìm kiếm thiết bị ...",
+                valueChangeEvent: "input",
+                onValueChanged: function(e) {
+                    searchText = e.value || "";
+                    applyFilters();
+                }
+            });
+
+            $(".category-filter").dxSelectBox({
+                placeholder: "Phân loại",
+                items: [],
+                showClearButton: true,
+                onValueChanged: function(e) {
+                    selectedCategory = e.value;
+                    applyFilters();
+                }
+            });
+
+            $(".department-filter").dxSelectBox({
+                placeholder: "Bộ phận",
+                items: [],
+                showClearButton: true,
+                onValueChanged: function(e) {
+                    selectedDepartment = e.value;
+                    applyFilters();
+                }
+            });
+
+            $.ajax({
+                url: apiUrl,
+                method: "GET",
+                dataType: "json"
+            }).done(function (devices){
+                allDevices = devices || [];
+                applyFilters();
+            }).fail(function (xhr) {
+                console.error("Không tải được danh sách thiết bị:", xhr.status, xhr.responseText);
+                $("#device-grid").before(
+                    $("<div class='alert alert-danger' role='alert'>")
+                        .text("Không tải được dữ liệu thiết bị. Hãy kiểm tra API /api/inspectiondeviceapi và kết nối cơ sở dữ liệu.")
+                );
+            });
+
+            $.when(
+                $.getJSON(catalogApiUrl + "/classifications"),
+                $.getJSON(catalogApiUrl + "/projects"),
+                $.getJSON(catalogApiUrl + "/statuses")
+            ).done(function (classifications, projects, statuses) {
+                $(".category-filter").dxSelectBox("instance")
+                    .option("items", classifications[0].map(function (item) { return item.Name; }));
+                $(".department-filter").dxSelectBox("instance")
+                    .option("items", projects[0].map(function (item) { return item.Name; }));
+                statuses[0].forEach(function (item) {
+                    statusColors[String(item.Name || "").toLocaleLowerCase()] = {
+                        TextColor: item.TextColor,
+                        BackgroundColor: item.BackgroundColor
+                    };
+                });
+                grid.repaint();
+            }).fail(showCatalogError);
+        });
+    </script>
+}
