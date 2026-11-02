@@ -1,0 +1,552 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var isEdit = ViewBag.IsEdit != null && (bool)ViewBag.IsEdit;
+    var requestId = ViewBag.RequestId == null ? 0 : (int)ViewBag.RequestId;
+    ViewBag.Title = isEdit ? "Sửa yêu cầu kiểm định" : "Tạo yêu cầu kiểm định";
+}
+
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.common.css" />
+<link rel="stylesheet" href="https://cdn3.devexpress.com/jslib/22.2.6/css/dx.light.css" />
+<style>
+    .request-form { margin: 18px auto; padding: 22px; background: #fff; border: 1px solid #e1e5eb; border-radius: 6px; box-shadow: 0 8px 24px rgba(30, 50, 80, .08); }
+    .request-form-heading { color: #000; font-size: 20px; font-weight: 700; border-left: 3px solid #ef3340; padding-left: 11px; margin: 8px 0 22px; }
+    .request-section-heading { margin: 0 0 12px; padding-left: 10px; border-left: 3px solid #ef3340; color: #303a44; font-size: 17px; font-weight: 650; line-height: 1.4; }
+    .asset-grid-scroll { overflow: hidden; border: 1px solid #d9dfe6; border-radius: 4px; }
+    #assetGrid { width: 100%; font-size: 13px; color: #263238; }
+    #assetGrid .dx-datagrid-headers { color: #35414c; font-size: 12.5px; font-weight: 600; }
+    #assetGrid .dx-header-row > td { background: #edf1f5; }
+    #assetGrid .dx-data-row:nth-child(even) > td { background: #fafbfd; }
+    #assetGrid .dx-data-row:hover > td { background: #f1f7ff; }
+    #assetGrid .dx-editor-cell .dx-texteditor { border-color: transparent; background: transparent; box-shadow: none; }
+    #assetGrid .dx-editor-cell .dx-texteditor.dx-state-focused { border-color: #86b7fe; background: #fff; box-shadow: 0 0 0 .15rem rgba(13, 110, 253, .12); }
+    #assetGrid .asset-doc-cell { min-height: 44px; min-width: 200px; cursor: pointer; }
+    #generalAttachmentsGrid { width: 100%; font-size: 13px; color: #263238; }
+    #generalAttachmentsGrid .dx-datagrid-headers { color: #35414c; font-size: 12.5px; font-weight: 600; }
+    #generalAttachmentsGrid .dx-header-row > td { background: #edf1f5; }
+    #generalAttachmentsGrid .dx-data-row:nth-child(even) > td { background: #fafbfd; }
+    #generalAttachmentsGrid .dx-data-row:hover > td { background: #f1f7ff; }
+    .attachment-name-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .attachment-name-cell a { overflow-wrap: anywhere; }
+    .attachment-file-type { min-width: 38px; color: #66717d; font-size: 11px; font-weight: 700; }
+    .asset-document-files { display: grid; gap: 4px; }
+    .asset-document-file-item { display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+    .asset-document-link { flex: 1; }
+    .remove-existing-document { display: none; color: #dc3545; padding: 0 4px; }
+    .asset-doc-cell.is-active .remove-existing-document { display: inline-block; }
+    .asset-add-document { display: none; margin-top: 6px; }
+    .asset-doc-cell.is-active .asset-add-document { display: inline-block; }
+    #formError { white-space: pre-wrap; }
+</style>
+
+<div class="request-form">
+    <h1 class="request-form-heading">ĐĂNG KÝ KIỂM ĐỊNH VẬT TƯ</h1>
+    <div id="formError" class="alert alert-danger d-none"></div>
+    <div class="row g-3">
+        <div class="col-md-3"><label class="form-label">Tiêu đề <span class="text-danger">*</span></label><div id="Title"></div></div>
+        <div class="col-md-3"><label class="form-label">Người lập <span class="text-danger">*</span></label><div id="Creator"></div></div>
+        <div class="col-md-3"><label class="form-label">Bộ phận/Dự án <span class="text-danger">*</span></label><div id="DepartmentProject"></div></div>
+        <div class="col-md-3"><label class="form-label">Phân loại</label><div id="Classification"></div></div>
+        <div class="col-md-3"><label class="form-label">Loại bảo hiểm</label><div id="InsuranceType"></div></div>
+        <div class="col-md-3"><label class="form-label">Hạn kiểm định</label><div id="inspectionExpiry"></div></div>
+        <div class="col-md-3"><label class="form-label">Mã phiếu kiểm định</label><div id="Code"></div></div>
+        <div class="col-md-3"><label class="form-label">Ngày thực hiện kiểm tra <span class="text-danger">*</span></label><div id="CreatedDate"></div></div>
+    </div>
+
+    <div class="mt-4"><h2 class="request-section-heading">Danh sách vật tư</h2></div>
+    <div class="d-flex gap-2 justify-content-end mb-2">
+        <div id="addAsset"></div>
+        <div id="exportAssets"></div>
+        <div id="importAssetsButton"></div>
+        <input id="importAssetsFile" type="file" accept=".csv,text/csv" hidden />
+    </div>
+    <div id="devicePickerPopup"></div>
+    <div class="asset-grid-scroll" role="region" aria-label="Danh sách vật tư, cuộn ngang để xem các cột"><div id="assetGrid"></div></div>
+
+    <div class="mt-3">
+        <label class="form-label">Biên bản đính kèm (Nếu có)</label>
+        <div id="generalAttachmentsGrid"></div>
+        <div id="attachmentFiles"></div>
+    </div>
+    <div class="d-flex justify-content-end gap-2 mt-4">
+        <div id="saveRequest"></div>
+        <a href="@Url.Action("Index", "Inspection")" class="btn btn-outline-secondary">Thoát</a>
+    </div>
+</div>
+
+@section scripts {
+<script>
+(function ($) {
+    var isEdit = @isEdit.ToString().ToLowerInvariant();
+    var requestId = @requestId;
+    var apiBase = "/api/inspectionapi";
+    var deviceApiUrl = '@Url.Content("~/api/inspectiondeviceapi")';
+    var catalogApiUrl = '@Url.Content("~/api/catalogapi")';
+    var assetRows = [];
+    var departmentOptions = [];
+    var classificationOptions = [];
+    var materialOptions = [];
+    var unitOptions = [];
+    var InsuranceTypeOptions = [];
+    var inspectionTypeOptions = [];
+    var supplierOptions = [];
+    var catalogsLoaded = false;
+    var assetGrid;
+    var generalAttachmentsGrid;
+    var devicePickerPopup;
+    var devicePickerSelect;
+    var devicePickerDevices = [];
+    var savedGeneralAttachments = [];
+    var pendingGeneralFiles = [];
+    var formControls = {};
+
+    function error(message) { $("#formError").text(message || "Không thể hoàn tất thao tác.").removeClass("d-none"); }
+    function clearError() { $("#formError").addClass("d-none").empty(); }
+    function localDateString(date) { return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0"); }
+    function dateValue(value) { if (!value) return ""; if (value instanceof Date) return localDateString(value); if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10); var d = new Date(value); if (isNaN(d.getTime())) return ""; return localDateString(d); }
+    function parseCsvDate(value) {
+        value = String(value || "").trim();
+        if (!value) return "";
+        var match = value.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2}|\d{4})$/);
+        if (match) {
+            var year = Number(match[3]); if (year < 100) year += year < 50 ? 2000 : 1900;
+            return year + "-" + String(Number(match[2])).padStart(2, "0") + "-" + String(Number(match[1])).padStart(2, "0");
+        }
+        return dateValue(value);
+    }
+    function csvDate(value) { var normalized = dateValue(value); if (!normalized) return ""; var p = normalized.split("-"); return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0].slice(-2) : normalized; }
+    function csvNumber(value) { var text = String(value || "").trim().replace(/\s/g, ""); if (!text) return 0; if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(text)) text = text.replace(/\./g, "").replace(",", "."); else text = text.replace(",", "."); var n = Number(text); return isFinite(n) ? n : 0; }
+    function fieldValue(name) { return formControls[name] ? formControls[name].option("value") : ""; }
+    function setFieldValue(name, value) { if (formControls[name]) formControls[name].option("value", value || null); }
+    function fileType(name) { var match = String(name || "").match(/\.([^.]+)$/); return match ? match[1].toUpperCase() : "FILE"; }
+    function refreshGeneralAttachments() {
+        if (!generalAttachmentsGrid) return;
+        var pending = pendingGeneralFiles.map(function (file, index) { return { Id: "pending-" + index, FileName: file.name, isPending: true, file: file }; });
+        generalAttachmentsGrid.option("dataSource", savedGeneralAttachments.concat(pending));
+    }
+    function initializeGeneralAttachmentsGrid() {
+        generalAttachmentsGrid = $("#generalAttachmentsGrid").dxDataGrid({
+            dataSource: [], showBorders: true, showRowLines: true, rowAlternationEnabled: false,
+            columnAutoWidth: false, wordWrapEnabled: true, hoverStateEnabled: true,
+            paging: { enabled: false }, sorting: { mode: "none" },
+            noDataText: "Chưa có biên bản đính kèm",
+            columns: [
+                { caption: "STT", width: 64, alignment: "center", cellTemplate: function (container, info) { container.text(info.rowIndex + 1); } },
+                { caption: "Loại file", width: 120, cellTemplate: function (container, info) { container.append($("<span class='attachment-file-type'>").text(fileType(info.data.FileName))); } },
+                { caption: "Tên file", cellTemplate: function (container, info) {
+                    var file = info.data, $cell = $("<div class='attachment-name-cell'>");
+                    if (!file.isPending) $cell.append($("<a target='_blank' rel='noopener'>").attr("href", apiBase + "/" + requestId + "/attachments/" + file.Id + "/preview").text(file.FileName));
+                    else $cell.append($("<span>").text(file.FileName));
+                    if (!file.isPending) $cell.append($("<div>").dxButton({ icon: "trash", type: "danger", stylingMode: "text", hint: "Xóa tệp", onClick: function () { deleteAttachment(file); } }));
+                    container.empty().append($cell);
+                } },
+                { caption: "Tải về", width: 120, alignment: "center", cellTemplate: function (container, info) {
+                    var file = info.data;
+                    $("<div>").dxButton({ icon: "download", text: file.isPending ? "Chưa lưu" : "Tải về", stylingMode: "text", disabled: !!file.isPending, hint: file.isPending ? "Lưu phiếu để tải tệp" : "Tải tệp về máy", onClick: function () { window.location.href = apiBase + "/" + requestId + "/attachments/" + file.Id; } }).appendTo(container);
+                } }
+            ]
+        }).dxDataGrid("instance");
+    }
+    function initializeFormControls() {
+        formControls.Title = $("#Title").dxTextBox({ maxLength: 500, placeholder: "Nhập tiêu đề..." }).dxTextBox("instance");
+        formControls.Creator = $("#Creator").dxSelectBox({ dataSource: ["Sharepoint Administrator - QA", "Nguyễn Văn A", "Trần Thị B"], placeholder: "Chọn người lập...", searchEnabled: true, showClearButton: true }).dxSelectBox("instance");
+        formControls.DepartmentProject = $("#DepartmentProject").dxSelectBox({ dataSource: departmentOptions, placeholder: "Chọn bộ phận/dự án...", searchEnabled: true, showClearButton: true, onValueChanged: refreshDevicePickerList }).dxSelectBox("instance");
+        formControls.Classification = $("#Classification").dxSelectBox({ dataSource: classificationOptions, placeholder: "Chọn phân loại...", searchEnabled: true, showClearButton: true, onValueChanged: refreshDevicePickerList }).dxSelectBox("instance");
+        formControls.InsuranceType = $("#InsuranceType").dxSelectBox({ dataSource: InsuranceTypeOptions, placeholder: "Chọn loại bảo hiểm...", searchEnabled: true, showClearButton: true }).dxSelectBox("instance");
+        formControls.inspectionExpiry = $("#inspectionExpiry").dxDateBox({ type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true, showClearButton: true }).dxDateBox("instance");
+        formControls.Code = $("#Code").dxTextBox({ readOnly: true, placeholder: "Tự động tạo khi lưu" }).dxTextBox("instance");
+        formControls.CreatedDate = $("#CreatedDate").dxDateBox({ type: "date", displayFormat: "dd/MM/yy", useMaskBehavior: true, onValueChanged: function (e) { assetRows.forEach(function (row) { row.InspectionDate = dateValue(e.value); }); refreshAssetGrid(); } }).dxDateBox("instance");
+        formControls.attachmentFiles = $("#attachmentFiles").dxFileUploader({ multiple: true, uploadMode: "useForm", showUploadButton: false, showCancelButton: false, labelText: "", selectButtonText: "Chọn file", onValueChanged: function (e) { pendingGeneralFiles = e.value || []; refreshGeneralAttachments(); } }).dxFileUploader("instance");
+    }
+    function addAsset(asset) {
+        asset = asset || {};
+        assetRows.push({
+            ClientId: "asset-" + Date.now() + "-" + Math.random().toString(36).slice(2),
+            InspectionDate: dateValue(asset.InspectionDate) || dateValue(fieldValue("CreatedDate")),
+            Id: asset.Id || asset.InspectionAssetId || 0, DeviceId: Number(asset.DeviceId) || 0, MaterialCode: asset.MaterialCode || "", MaterialCode: asset.MaterialCode || "", Equipment: asset.Equipment || "", DocumentName: asset.DocumentName || "",
+            PurchaseDate: dateValue(asset.PurchaseDate), ExpiryDate: dateValue(asset.ExpiryDate),
+            Value: Number(asset.Value) || 0, Premium: Number(asset.Premium) || 0, Quantity: Number(asset.Quantity) || 1,
+            UnitOfMeasure: asset.UnitOfMeasure || "",
+            InspectionType: asset.InspectionType || "", ContractNumber: asset.ContractNumber || "", Supplier: asset.Supplier || "",
+            existingAssetFiles: asset.existingAssetFiles || [], pendingAssetFiles: [], documentCellActive: false
+        });
+        refreshAssetGrid();
+    }
+    function refreshAssetGrid() {
+        if (assetGrid) assetGrid.option("dataSource", assetRows.slice());
+    }
+    function normalizedFilterValue(value) {
+        return String(value || "").trim().toLocaleLowerCase();
+    }
+    function refreshDevicePickerList() {
+        if (!devicePickerSelect) return;
+        var department = normalizedFilterValue(fieldValue("DepartmentProject"));
+        var classification = normalizedFilterValue(fieldValue("Classification"));
+        var filtered = devicePickerDevices.filter(function (device) {
+            return (!department || normalizedFilterValue(device.Department) === department) &&
+                (!classification || normalizedFilterValue(device.Classification) === classification);
+        });
+        devicePickerSelect.option({ dataSource: filtered, value: null });
+    }
+    function openDevicePicker() {
+        if (!devicePickerPopup) {
+            devicePickerPopup = $("#devicePickerPopup").dxPopup({
+                title: "Chọn thiết bị từ danh mục",
+                contentTemplate: function (container) {
+                    devicePickerSelect = $("<div>").appendTo(container).dxSelectBox({
+                        dataSource: [], valueExpr: "DeviceId", displayExpr: function (device) { return device ? device.DeviceName + " — " + device.MaterialCode : ""; },
+                        searchEnabled: true,
+                        placeholder: "Tìm và chọn thiết bị trong danh mục...",
+                        noDataText: "Không có thiết bị khớp tiêu chí đã chọn"
+                    }).dxSelectBox("instance");
+                    $("<div class='mt-3 d-flex justify-content-end'>").appendTo(container).dxButton({
+                        text: "Thêm vào phiếu", icon: "plus", type: "default", stylingMode: "contained",
+                        onClick: function () {
+                            var device = devicePickerSelect.option("selectedItem");
+                            if (!device) return;
+                            addAsset({
+                                DeviceId: device.DeviceId,
+                                MaterialCode: device.MaterialCode,
+                                MaterialCode: device.MaterialCode,
+                                Equipment: device.DeviceName,
+                                PurchaseDate: device.PurchaseDate,
+                                ExpiryDate: device.ExpiryDate,
+                                Quantity: device.Quantity,
+                                UnitOfMeasure: device.UnitOfMeasure,
+                                Value: device.Value,
+                                Premium: device.inspectionFee,
+                                InsuranceType: device.InsuranceType,
+                                Supplier: device.Supplier,
+                                Quantity: 1
+                            });
+                            devicePickerPopup.hide();
+                        }
+                    });
+                },
+                width: 520,
+                maxWidth: "95vw",
+                height: "auto",
+                showCloseButton: true,
+                hideOnOutsideClick: true,
+                onShown: function () {
+                    refreshDevicePickerList();
+                }
+            }).dxPopup("instance");
+        }
+
+        $.getJSON(deviceApiUrl)
+            .done(function (devices) {
+                devicePickerDevices = devices || [];
+                devicePickerPopup.show();
+            })
+            .fail(function (xhr) {
+                error(xhr.responseJSON && xhr.responseJSON.Message || xhr.responseText || "Không tải được danh mục thiết bị.");
+            });
+    }
+    function renderDocumentCell(container, cellInfo) {
+        var asset = cellInfo.data;
+        var $cell = $("<div class='asset-doc-cell'>").toggleClass("is-active", !!asset.documentCellActive);
+        var $list = $("<div class='asset-document-files'>");
+        (asset.existingAssetFiles || []).forEach(function (file) {
+            var url = apiBase + "/" + requestId + "/attachments/" + file.Id + "/preview";
+            var $item = $("<div class='asset-document-file-item'>");
+            $item.append($("<a class='asset-document-link' target='_blank' rel='noopener'>").attr("href", url).text(file.FileName));
+            $item.append($("<button type='button' class='btn btn-sm btn-link remove-existing-document' title='Xóa tài liệu'>X</button>").on("click", function (e) { e.stopPropagation(); deleteAttachment(file); }));
+            $list.append($item);
+        });
+        (asset.pendingAssetFiles || []).forEach(function (f, i) {
+            $list.append($("<div class='asset-document-file-item'>").append($("<span>").text(f.name)).append($("<button type='button' class='btn btn-sm btn-link text-danger'>X</button>").on("click", function (e) { e.stopPropagation(); asset.pendingAssetFiles.splice(i, 1); assetGrid.repaintRows([cellInfo.rowIndex]); })));
+        });
+        if (!(asset.existingAssetFiles || []).length && !(asset.pendingAssetFiles || []).length && asset.DocumentName) $list.append($("<span>").text(asset.DocumentName));
+        $cell.append($list);
+        if (asset.documentCellActive) {
+            var $fileInput = $("<input type='file' multiple hidden>").on("change", function () {
+                Array.from(this.files || []).forEach(function (file) { asset.pendingAssetFiles.push({ file: file, name: file.name }); });
+                this.value = ""; assetGrid.repaintRows([cellInfo.rowIndex]);
+            });
+            $cell.append($fileInput);
+            $cell.append($('<div>').dxButton({ text: "Thêm file", icon: "plus", type: "default", stylingMode: "outlined", onClick: function () { $fileInput.trigger("click"); } }).addClass("asset-add-document"));
+        }
+        $cell.on("click", function (e) {
+            if ($(e.target).closest("a,button,input,.dx-button").length) return;
+            asset.documentCellActive = true;
+            assetGrid.repaintRows([cellInfo.rowIndex]);
+        });
+        container.empty().append($cell);
+    }
+    function initializeAssetGrid() {
+        $("#assetGrid").dxDataGrid({
+            dataSource: assetRows,
+            keyExpr: "ClientId",
+            showBorders: true,
+            showRowLines: true,
+            rowAlternationEnabled: false,
+            allowSorting: false,
+            columnAutoWidth: false,
+            allowColumnResizing: true,
+            columnResizingMode: "nextColumn",
+            wordWrapEnabled: true,
+            hoverStateEnabled: true,
+            scrolling: { mode: "standard", showScrollbar: "always" },
+            noDataText: "Chưa có vật tư",
+            editing: { mode: "cell", allowUpdating: true, allowAdding: false, allowDeleting: false },
+            columns: [
+                { caption: "STT", width: 58, alignment: "center", allowEditing: false, cellTemplate: function (container, info) { container.text(info.rowIndex + 1); } },
+                {
+                    dataField: "Equipment", caption: "Vật tư/Thiết bị", minWidth: 180,
+                    editCellTemplate: function (container, options) {
+                        $("<div>").dxSelectBox({
+                            dataSource: materialOptions,
+                            value: options.value,
+                            searchEnabled: true,
+                            acceptCustomValue: true,
+                            onCustomItemCreating: function (e) { e.customItem = e.text; },
+                            onValueChanged: function (e) { options.setValue(e.value); }
+                        }).appendTo(container);
+                    }
+                },
+                { caption: "Tài liệu", width: 235, allowEditing: false, cellTemplate: renderDocumentCell },
+                { dataField: "InspectionDate", caption: "Ngày kiểm định", dataType: "date", format: "dd/MM/yy", editorOptions: { displayFormat: "dd/MM/yy" }, width: 130 },
+                { dataField: "Premium", caption: "Phí kiểm định", dataType: "number", format: "#,##0.##", alignment: "right", width: 125 },
+                { dataField: "Quantity", caption: "Số lượng", dataType: "number", alignment: "center", width: 100 },
+                { dataField: "InspectionType", caption: "Loại kiểm định", minWidth: 180, editCellTemplate: function (container, options) {
+                    $("<div>").dxSelectBox({
+                        dataSource: inspectionTypeOptions,
+                        value: options.value,
+                        searchEnabled: true,
+                        showClearButton: true,
+                        onValueChanged: function (e) {
+                            options.setValue(e.value);
+                            options.data.InspectionType = e.value || "";
+                            var row = assetRows.find(function (item) { return item.ClientId === options.data.ClientId; });
+                            if (row) row.InspectionType = e.value || "";
+                        }
+                    }).appendTo(container);
+                } },
+                { dataField: "ContractNumber", caption: "Số hợp đồng", minWidth: 160 },
+                { dataField: "Supplier", caption: "Nhà cung cấp", minWidth: 160, editCellTemplate: function (container, options) {
+                    $("<div>").dxSelectBox({
+                        dataSource: supplierOptions,
+                        value: options.value,
+                        searchEnabled: true,
+                        showClearButton: true,
+                        onValueChanged: function (e) { options.setValue(e.value); }
+                    }).appendTo(container);
+                } },
+                { caption: "Thao tác", width: 78, alignment: "center", allowEditing: false, cellTemplate: function (container, info) { 
+                    $("<div>").dxButton({ 
+                        icon: "trash", 
+                        type: "danger", 
+                        stylingMode: "text", 
+                        hint: "Xóa vật tư", 
+                        
+                        onClick: function () { 
+                            var index = assetRows.findIndex(function (item) { 
+                                return item.ClientId === info.data.ClientId; 
+                            }); 
+                            if (index >= 0) assetRows.splice(index, 1); refreshAssetGrid(); 
+                        } }).appendTo(container); 
+                    } 
+                }
+            ]
+        });
+        assetGrid = $("#assetGrid").dxDataGrid("instance");
+    }
+    function loadAttachments() {
+        if (!isEdit || !requestId) return;
+        $.getJSON(apiBase + "/" + requestId + "/attachments").done(function (files) {
+            assetRows.forEach(function (asset) { asset.existingAssetFiles = []; });
+            savedGeneralAttachments = [];
+            files.forEach(function (file) {
+                if (file.InspectionAssetId) {
+                    var asset = assetRows.find(function (item) { return item.Id === file.InspectionAssetId; });
+                    if (asset) asset.existingAssetFiles.push(file);
+                } else {
+                    savedGeneralAttachments.push(file);
+                }
+            });
+            refreshAssetGrid();
+            refreshGeneralAttachments();
+        }).fail(function (xhr) { error(xhr.responseText || "Không tải được tài liệu đính kèm."); });
+    }
+    function deleteAttachment(file) {
+        if (!confirm("Xóa tệp " + file.FileName + "?")) return;
+        $.ajax({ url: apiBase + "/" + requestId + "/attachments/" + file.Id, method: "DELETE" }).done(loadAttachments).fail(function () { error("Không xóa được tệp đính kèm."); });
+    }
+    function loadRequest() {
+        if (!isEdit || !requestId) return;
+        $.getJSON(apiBase + "/" + requestId).done(function (data) {
+            ["Title", "Creator", "DepartmentProject", "Classification", "InsuranceType"].forEach(function (key) { setFieldValue(key, data[key]); });
+            setFieldValue("CreatedDate", dateValue(data.InspectionDate));
+            setFieldValue("Code", data.Code);
+            assetRows = [];
+            refreshAssetGrid();
+            // Keep the saved snapshot fields when loading edit. Display reads these
+            // values from InspectionAssets; passing only the ID/name made the rest
+            // of the grid look empty until a device was selected again.
+            (data.Equipment || []).forEach(function (device) {
+                addAsset({
+                    DeviceId: device.DeviceId,
+                    InspectionAssetId: device.InspectionAssetId,
+                    MaterialCode: device.MaterialCode,
+                    MaterialCode: device.MaterialCode,
+                    Equipment: device.DeviceName,
+                    PurchaseDate: device.PurchaseDate,
+                    ExpiryDate: device.ExpiryDate,
+                    Value: device.Value,
+                    Premium: device.InsuranceFee,
+                    InspectionType: device.InspectionType,
+                    Quantity: device.Quantity,
+                    UnitOfMeasure: device.UnitOfMeasure,
+                    Supplier: device.Supplier
+                });
+            });
+            loadAttachments();
+        }).fail(function (xhr) { error(xhr.responseJSON && xhr.responseJSON.Message ? xhr.responseJSON.Message : "Không tải được dữ liệu phiếu kiểm định."); });
+    }
+    function collect() {
+        var deviceIds = [];
+        var equipment = [];
+        assetRows.forEach(function (row) {
+            var device = devicePickerDevices.find(function (item) {
+                return Number(item.DeviceId) === Number(row.DeviceId) || String(item.DeviceName || "").trim().toLocaleLowerCase() === String(row.Equipment || "").trim().toLocaleLowerCase();
+            });
+            if (!device) throw new Error("Thiết bị ‘" + (row.Equipment || "") + "’ không có trong danh mục. Vui lòng chọn lại bằng nút Thêm thiết bị.");
+            if (deviceIds.indexOf(device.DeviceId) >= 0) throw new Error("Thiết bị ‘" + device.DeviceName + "’ đang bị chọn trùng.");
+            if (Number(row.Premium) < 0) throw new Error("Phí kiểm định không được âm.");
+            deviceIds.push(device.DeviceId);
+            equipment.push({ DeviceId: device.DeviceId, InsuranceFee: Number(row.Premium) || 0, InspectionType: row.InspectionType || "" });
+        });
+
+        var model = {
+            Id: requestId,
+            Title: fieldValue("Title"),
+            Creator: fieldValue("Creator"),
+            DepartmentProject: fieldValue("DepartmentProject"),
+            Classification: fieldValue("Classification"),
+            InspectionDate: dateValue(fieldValue("CreatedDate")),
+            InsuranceType: fieldValue("InsuranceType"),
+            DeviceIds: deviceIds,
+            Equipment: equipment
+        };
+        if (!model.Title || !String(model.Title).trim()) throw new Error("Vui lòng nhập tiêu đề phiếu.");
+        if (!model.Creator || !String(model.Creator).trim()) throw new Error("Vui lòng chọn người lập.");
+        if (!model.DepartmentProject) throw new Error("Vui lòng chọn bộ phận/dự án.");
+        if (!model.InspectionDate) throw new Error("Vui lòng nhập ngày thực hiện kiểm tra.");
+        if (!model.DeviceIds.length) throw new Error("Vui lòng chọn ít nhất một thiết bị trong danh sách.");
+        return model;
+    }
+    function uploadFile(id, file, assetId) {
+        var data = new FormData(); data.append("file", file); if (assetId) data.append("assetId", assetId);
+        return $.ajax({ url: apiBase + "/" + id + "/attachments", method: "POST", data: data, processData: false, contentType: false });
+    }
+    function save() {
+        if (assetGrid && assetGrid.hasEditData()) {
+            $.when(assetGrid.saveEditData()).done(saveRequest).fail(function () {
+                error("Không thể xác nhận thay đổi trong danh sách vật tư.");
+            });
+            return;
+        }
+        saveRequest();
+    }
+    function saveRequest() {
+        clearError();
+        var model;
+        try { model = collect(); } catch (e) { error(e.message); return; }
+        $.ajax({ url: apiBase + (isEdit ? "/" + requestId : ""), method: isEdit ? "PUT" : "POST", data: JSON.stringify(model), contentType: "application/json; charset=utf-8" })
+            .done(function (saved) {
+                var jobs = [];
+                assetRows.forEach(function (row) {
+                    var savedAsset = (saved.Equipment || []).find(function (item) { return Number(item.DeviceId) === Number(row.DeviceId); });
+                    if (savedAsset) (row.pendingAssetFiles || []).forEach(function (pending) { jobs.push(uploadFile(saved.Id, pending.file, savedAsset.InspectionAssetId)); });
+                });
+                (formControls.attachmentFiles.option("value") || []).forEach(function (file) { jobs.push(uploadFile(saved.Id, file)); });
+                $.when.apply($, jobs).done(function () { window.location.href = "/Inspection/Index"; })
+                    .fail(function () { error("Phiếu đã lưu nhưng không tải được một hoặc nhiều tệp đính kèm."); });
+            })
+            .fail(function (xhr) {
+                var response = xhr.responseJSON;
+                error(response && (response.Message || response.message) || xhr.responseText || "Không lưu được phiếu kiểm định.");
+            });
+    }
+    $.when(
+        $.getJSON(catalogApiUrl + "/projects"),
+        $.getJSON(catalogApiUrl + "/classifications"),
+        $.getJSON(catalogApiUrl + "/materials"),
+        $.getJSON(catalogApiUrl + "/units"),
+        $.getJSON(catalogApiUrl + "/insurance-types"),
+        $.getJSON(catalogApiUrl + "/inspection-types"),
+        $.getJSON(catalogApiUrl + "/suppliers"),
+        $.getJSON(deviceApiUrl)
+    ).done(function (projects, classifications, materials, units, InsuranceTypes, InspectionTypes, suppliers, devices) {
+        departmentOptions = projects[0].map(function (item) { return item.Name; });
+        classificationOptions = classifications[0].map(function (item) { return item.Name; });
+        materialOptions = materials[0].map(function (item) { return item.Name; });
+        unitOptions = units[0].map(function (item) { return item.Name; });
+        InsuranceTypeOptions = InsuranceTypes[0].map(function (item) { return item.Name; });
+        inspectionTypeOptions = InspectionTypes[0].map(function (item) { return item.Name; });
+        supplierOptions = suppliers[0].map(function (item) { return item.Name; });
+        devicePickerDevices = devices[0] || [];
+        catalogsLoaded = true;
+
+        initializeFormControls();
+        initializeAssetGrid();
+        initializeGeneralAttachmentsGrid();
+        $("#addAsset").dxButton({ text: "Thêm thiết bị", icon: "plus", type: "default", stylingMode: "outlined", onClick: openDevicePicker });
+        $("#exportAssets").dxButton({ text: "Export CSV", icon: "export", type: "default", stylingMode: "contained", onClick: exportAssets });
+        $("#importAssetsButton").dxButton({ text: "Import CSV", icon: "upload", type: "default", stylingMode: "contained", onClick: function () { $("#importAssetsFile").trigger("click"); } });
+        $("#saveRequest").dxButton({ text: "Lưu", icon: "save", type: "default", stylingMode: "contained", onClick: save });
+        if (isEdit) loadRequest(); else setFieldValue("CreatedDate", localDateString(new Date()));
+    }).fail(function (xhr) {
+        error(xhr.responseJSON && (xhr.responseJSON.Message || xhr.responseJSON.message) || "Không tải được danh mục bộ phận/dự án, phân loại, vật tư, đơn vị tính, loại bảo hiểm, loại kiểm định hoặc nhà cung cấp.");
+    });
+
+    function exportAssets() {
+        var rows = [["Thiết bị", "Tài liệu", "Ngày kiểm định", "Ngày đến hạn", "Giá trị", "Phí kiểm định", "Số lượng", "Đơn vị tính", "Loại kiểm định", "Số hợp đồng", "Nhà cung cấp"]];
+        assetRows.forEach(function (asset) { rows.push([asset.Equipment, (asset.existingAssetFiles||[]).map(function(f){return f.FileName;}).join("; ") || asset.DocumentName || "", csvDate(asset.InspectionDate), csvDate(asset.ExpiryDate), asset.Value, asset.Premium, asset.Quantity, asset.UnitOfMeasure, asset.InspectionType, asset.ContractNumber, asset.Supplier]); });
+        var csv = rows.map(function (r) { return r.map(function (v) { return '"' + String(v || "").replace(/"/g, '""') + '"'; }).join(","); }).join("\r\n");
+        var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\uFEFF" + csv], {type:"text/csv;charset=utf-8"})); a.download = "danh-sach-vat-tu.csv"; a.click(); URL.revokeObjectURL(a.href);
+    }
+    $("#importAssetsFile").on("change", function () {
+        if (!this.files.length) return;
+        var reader = new FileReader(); reader.onload = function () {
+            var bytes = new Uint8Array(reader.result), text;
+            if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) text = new TextDecoder("utf-8").decode(bytes);
+            else { try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch (_) { text = new TextDecoder("windows-1252").decode(bytes); } }
+            text = text.replace(/^\uFEFF/, "");
+            var rows = [], row = [], field = "", quoted = false;
+            for (var i = 0; i < text.length; i++) {
+                var ch = text[i];
+                if (ch === '"') { if (quoted && text[i + 1] === '"') { field += '"'; i++; } else quoted = !quoted; }
+                else if (ch === "," && !quoted) { row.push(field); field = ""; }
+                else if ((ch === "\n" || ch === "\r") && !quoted) { if (ch === "\r" && text[i + 1] === "\n") i++; row.push(field); if (row.some(function (v) { return v.trim() !== ""; })) rows.push(row); row = []; field = ""; }
+                else field += ch;
+            }
+            if (field.length || row.length) { row.push(field); rows.push(row); }
+            if (rows.length < 2) { error("CSV không có dòng dữ liệu."); return; }
+            function normalizeHeader(value) { return String(value || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/[^a-z0-9]/g, ""); }
+            var header = rows[0].map(normalizeHeader);
+            var columns = [
+                ["equipment", ["thiết bị", "tên thiết bị", "vật tư"]], ["document", ["tài liệu", "tài liệu đính kèm", "tên tài liệu"]],
+                ["purchase", ["ngày mua bh", "ngày mua kiểm định", "ngày mua"]], ["expiry", ["ngày đến hạn", "ngày hết hạn"]],
+                ["value", ["giá trị"]], ["premium", ["phí kiểm định"]], ["quantity", ["số lượng"]],
+                ["unit", ["đơn vị tính", "đơn vị"]],
+                ["inspection", ["loại kiểm định"]], ["contract", ["số hợp đồng", "số hợp đồng kiểm định"]], ["supplier", ["nhà cung cấp"]]
+            ];
+            var indexes = {};
+            columns.forEach(function (column) { var names = column[1].map(normalizeHeader); indexes[column[0]] = header.findIndex(function (h) { return names.indexOf(h) >= 0; }); });
+            if (columns.some(function (column) { return column[0] !== "unit" && indexes[column[0]] < 0; })) { error("Tiêu đề CSV chưa đủ các cột bắt buộc theo mẫu."); return; }
+            function get(c, name) { return c[indexes[name]] || ""; }
+            assetRows = [];
+            refreshAssetGrid();
+            rows.slice(1).forEach(function (c) {
+                if (!c.some(function (v) { return v.trim() !== ""; })) return;
+                addAsset({ Equipment:get(c,"equipment"), PurchaseDate:parseCsvDate(get(c,"purchase")), ExpiryDate:parseCsvDate(get(c,"expiry")), Value:csvNumber(get(c,"value")), Premium:csvNumber(get(c,"premium")), Quantity:csvNumber(get(c,"quantity")) || 1, UnitOfMeasure:get(c,"unit"), InspectionType:get(c,"inspection"), ContractNumber:get(c,"contract"), Supplier:get(c,"supplier"), DocumentName:get(c,"document") });
+            });
+        };
+        reader.readAsArrayBuffer(this.files[0]);
+        this.value = "";
+    });
+})(jQuery);
+</script>
+}
+
